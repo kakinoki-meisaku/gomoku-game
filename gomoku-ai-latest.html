@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五目並べ (AI対戦版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.jsの読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* フォント設定 */
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* 盤面コンテナのスタイル */
+        .board-grid {
+            /* 画面サイズに合わせて調整し、スクロールを防ぐ */
+            width: min(80vmin, 500px); 
+            height: min(80vmin, 500px);
+            aspect-ratio: 1 / 1; 
+            background-color: #F8D395; /* 碁盤の色 */
+            border: 4px solid #4a2d10;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.3);
+            margin: 0 auto; 
+            border-radius: 8px;
+            position: relative; 
+            
+            /* 15x15のマス目（線は14間隔） */
+            --interval: calc(100% / 14); 
+            
+            /* 背景レイヤー定義（碁盤の線と天元） */
+            background-image: 
+                linear-gradient(to right, #7D4C28 1px, transparent 1px),
+                linear-gradient(to bottom, #7D4C28 1px, transparent 1px),
+                radial-gradient(circle at center, #7D4C28 4px, transparent 5px); 
+            
+            background-repeat: repeat, repeat, no-repeat; 
+            background-size: var(--interval) var(--interval);
+            background-position: 
+                0 0, 
+                0 0, 
+                calc(var(--interval) * 7) calc(var(--interval) * 7); 
+        }
+
+        /* 石を置く交点 */
+        .cell {
+            position: absolute;
+            width: 5%; 
+            height: 5%;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        /* 石のスタイル */
+        .piece {
+            position: absolute;
+            width: 90%; 
+            height: 90%;
+            border-radius: 50%;
+            pointer-events: none; 
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0); 
+            animation: placePiece 0.15s forwards; 
+        }
+
+        .piece-black { background-color: #000; }
+        .piece-white { background-color: #fff; border: 1px solid #444; }
+
+        @keyframes placePiece {
+            from { transform: translate(-50%, -50%) scale(0); }
+            to { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        /* 最後に置いた石のハイライト（赤い枠線） */
+        .last-move {
+            box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+        
+        /* 勝利ラインのハイライト */
+        .winning-piece {
+            /* 勝利した石を金色にハイライト */
+            box-shadow: 0 0 10px 4px gold, 0 1px 3px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+
+    <script>
+        // ゲーム定数
+        const BOARD_SIZE = 15;
+        const PLAYER_HUMAN = 1; // 黒 (先手)
+        const PLAYER_AI = 2;    // 白 (後手)
+        const TURN_TIME_LIMIT = 10; // ターンの制限時間 (秒)
+
+        // AI評価の重み (AIロジックは変更なし)
+        const SCORE_WEIGHTS = {
+            0: 0, 1: 1, 2: 10, 3: 100, 4: 1000, 5: 1000000
+        };
+        const DEFENSE_MULTIPLIER = 1.2; 
+
+        // ゲーム状態変数
+        let board = [];
+        let currentPlayer = PLAYER_HUMAN;
+        let gameActive = true;
+        let lastMove = null;
+        let timerInterval = null;
+        let timeRemaining = TURN_TIME_LIMIT;
+        let moveCount = 0; // 手数カウント
+
+        // DOM要素
+        let statusElement;
+        let boardElement;
+        let timerElement;
+        let thinkingIndicator; // AI思考中表示用の新しい要素
+
+        /**
+         * 盤面の初期化とUIのセットアップ
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            statusElement = document.getElementById('status-text');
+            boardElement = document.getElementById('board');
+            timerElement = document.getElementById('timer');
+            // UI変更に伴い、思考中インジケータを新しいIDに設定
+            thinkingIndicator = document.getElementById('thinking-indicator'); 
+            
+            initializeBoardUI();
+            initializeGame();
+            
+            document.getElementById('reset-button').addEventListener('click', initializeGame);
+        });
+
+        /**
+         * ゲーム状態を初期化
+         */
+        function initializeGame() {
+            board = Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(0));
+            currentPlayer = PLAYER_HUMAN;
+            gameActive = true;
+            lastMove = null;
+            moveCount = 0;
+            clearInterval(timerInterval);
+            timeRemaining = TURN_TIME_LIMIT;
+            timerElement.textContent = "持ち時間: 10秒";
+            timerElement.classList.remove('text-red-500', 'font-bold', 'animate-pulse');
+            thinkingIndicator.textContent = ""; // 思考中表示をリセット
+            renderGame();
+            updateStatus(`あなた（黒）のターンです。`);
+        }
+        
+        /**
+         * 盤面のUIを初期化 (交点セルの作成)
+         */
+        function initializeBoardUI() {
+            boardElement.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    
+                    // 座標をパーセンテージで計算し、交点に配置
+                    const interval = 100 / (BOARD_SIZE - 1);
+                    const leftPos = c * interval; 
+                    const topPos = r * interval;
+                    
+                    cell.style.left = `${leftPos}%`;
+                    cell.style.top = `${topPos}%`;
+                    cell.style.transform = 'translate(-50%, -50%)'; 
+                    
+                    cell.addEventListener('click', () => handleCellClick(r, c));
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+
+        /**
+         * ゲームの全体描画とターン処理
+         */
+        function renderGame() {
+            const cells = boardElement.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                const r = parseInt(cell.dataset.row);
+                const c = parseInt(cell.dataset.col);
+                const player = board[r][c];
+
+                cell.innerHTML = ''; // 既存の石をクリア
+                
+                if (player !== 0) {
+                    const piece = document.createElement('div');
+                    piece.classList.add('piece', player === PLAYER_HUMAN ? 'piece-black' : 'piece-white');
+                    
+                    // 最後に置いた石をハイライト
+                    if (lastMove && lastMove.r === r && lastMove.c === c) {
+                        piece.classList.add('last-move');
+                    }
+                    
+                    cell.appendChild(piece);
+                }
+            });
+
+            // 勝利ラインのハイライト処理
+            if (!gameActive && lastMove) {
+                // 勝利時のみハイライト
+                if (checkWin(lastMove.r, lastMove.c, lastMove.player)) {
+                    highlightWinningLine(lastMove.r, lastMove.c, lastMove.player);
+                }
+            }
+
+            // ターン処理とタイマー開始
+            if (gameActive) {
+                clearInterval(timerInterval);
+                if (currentPlayer === PLAYER_HUMAN) {
+                    thinkingIndicator.textContent = ""; // 人間プレイヤーのターンでは非表示
+                    if (moveCount > 0) { // 2手目以降はタイマー開始
+                        startTimer();
+                    } else {
+                        timerElement.textContent = "最初の1手は時間無制限です";
+                    }
+                } else {
+                    timerElement.textContent = "AIのターン";
+                    setTimeout(aiTurn, 500); // AIは0.5秒後に手を打つ
+                }
+            }
+        }
+
+        /**
+         * タイマーを開始/更新する
+         */
+        function startTimer() {
+            timeRemaining = TURN_TIME_LIMIT;
+            timerElement.classList.remove('text-red-500', 'font-bold', 'animate-pulse');
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                // 小数第一位は表示しない
+                timerElement.textContent = `残り時間: ${timeRemaining} 秒`;
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    handleTimeOut();
+                } else if (timeRemaining <= 5) {
+                    timerElement.classList.add('text-red-500', 'font-bold', 'animate-pulse');
+                }
+            }, 1000);
+        }
+
+        /**
+         * タイムアウト時の処理
+         */
+        function handleTimeOut() {
+            gameActive = false;
+            updateStatus(`【時間切れ】10秒以内に石を置けませんでした。AI（白）の勝ちです！`, 'loss');
+        }
+
+        /**
+         * 交点クリック時の処理 (人間プレイヤー)
+         */
+        function handleCellClick(r, c) {
+            if (!gameActive || currentPlayer !== PLAYER_HUMAN) return;
+
+            if (board[r][c] === 0) {
+                clearInterval(timerInterval); // タイマー停止
+                placePiece(r, c, PLAYER_HUMAN);
+            }
+        }
+
+        /**
+         * 共通の石配置処理
+         */
+        function placePiece(r, c, player) {
+            board[r][c] = player;
+            lastMove = { r, c, player };
+            moveCount++;
+
+            if (checkWin(r, c, player)) {
+                gameActive = false;
+                const winnerText = player === PLAYER_HUMAN ? `あなた（黒）` : `AI（白）`;
+                updateStatus(`【勝利】${winnerText}の勝ちです！`, player === PLAYER_HUMAN ? 'win' : 'loss');
+                renderGame(); // 勝利ハイライトのために明示的に描画更新
+            } else if (isDraw()) {
+                gameActive = false;
+                updateStatus(`【引き分け】碁盤がすべて埋まりました。`, 'draw');
+                renderGame(); // 描画更新
+            } else {
+                switchTurn();
+            }
+        }
+
+        /**
+         * ターン切り替え
+         */
+        function switchTurn() {
+            currentPlayer = currentPlayer === PLAYER_HUMAN ? PLAYER_AI : PLAYER_HUMAN;
+            renderGame();
+            const turnText = currentPlayer === PLAYER_HUMAN ? `あなた（黒）` : `AI（白）`;
+            updateStatus(`${turnText}のターンです。`);
+        }
+
+        /**
+         * ステータス表示の更新
+         */
+        function updateStatus(message, type = 'normal') {
+            statusElement.textContent = message;
+            
+            // 背景色の設定
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'w-full p-2 text-center rounded-xl shadow-md transition-colors duration-300';
+            
+            if (type === 'win') {
+                statusDiv.classList.add('bg-green-500', 'text-white');
+            } else if (type === 'loss') {
+                statusDiv.classList.add('bg-red-500', 'text-white');
+            } else if (type === 'draw') {
+                statusDiv.classList.add('bg-yellow-500', 'text-gray-800');
+            } else {
+                statusDiv.classList.add('bg-blue-500', 'text-white');
+            }
+        }
+
+        // --- AIロジック ---
+
+        /**
+         * AIのターン処理
+         */
+        async function aiTurn() {
+            // UI変更: 思考中メッセージをインジケーターに表示
+            thinkingIndicator.textContent = "AI 思考中..."; 
+            
+            const { bestMove } = findBestMove(PLAYER_AI);
+
+            if (bestMove) {
+                // --- 警告音チェック: 飛び石リーチを含む脅威を正確にチェック ---
+                
+                // 1. 一時的に石を置いてみる
+                board[bestMove.r][bestMove.c] = PLAYER_AI; 
+                
+                // 勝利(5連)またはリーチ(穴1つの4連)をチェック
+                if (checkThreateningLine(bestMove.r, bestMove.c, PLAYER_AI)) {
+                    playReachSound();
+                    // 警告音の後に0.8秒待機
+                    await new Promise(resolve => setTimeout(resolve, 800)); 
+                }
+                
+                // 2. 盤面を元に戻す
+                board[bestMove.r][bestMove.c] = 0;
+                // --- 警告音チェック 終了 ---
+
+                thinkingIndicator.textContent = ""; // 思考中メッセージを非表示
+                placePiece(bestMove.r, bestMove.c, PLAYER_AI);
+            } else {
+                thinkingIndicator.textContent = "";
+                // 手が見つからなかった（通常ありえない）
+                switchTurn(); 
+            }
+        }
+        
+        /**
+         * 警告音を再生する (Tone.jsを使用)
+         */
+        function playReachSound() {
+            // Web Audio APIの制約により、ユーザー操作後にTone.start()が必要
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+
+            // 短い高音の警告音
+            const synth = new Tone.Synth().toDestination();
+            synth.triggerAttackRelease("C5", "8n");
+            
+            setTimeout(() => {
+                synth.triggerAttackRelease("G5", "8n"); // 少し高い音を重ねる
+            }, 100);
+        }
+
+        /**
+         * 指定されたマスに石を置いた状態 (board[r][c] = player) で、
+         * 5連ライン（勝利）または穴1つを含む4連ライン（リーチ）が完成するかをチェックする。
+         * * この関数は、飛び石リーチ (例: OOO_O) も含めて検出するために導入されました。
+         * @param {number} r - 行
+         * @param {number} c - 列
+         * @param {number} player - プレイヤー (AI)
+         * @returns {boolean} リーチ以上の脅威があればtrue
+         */
+        function checkThreateningLine(r, c, player) {
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]]; 
+            const opponent = player === PLAYER_HUMAN ? PLAYER_AI : PLAYER_HUMAN;
+
+            for (const [dr, dc] of directions) {
+                // 5マス分の窓を移動させながらチェック
+                // この窓が (r, c) を含むように、走査開始位置を調整
+                for (let offset = -4; offset <= 0; offset++) {
+                    let friendlyCount = 0;
+                    let emptyCount = 0;
+                    let blocked = false;
+                    
+                    // 5マスウィンドウの走査
+                    for (let k = 0; k < 5; k++) {
+                        const nr = r + dr * (k + offset);
+                        const nc = c + dc * (k + offset);
+                        
+                        if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) {
+                            // 盤外は無視
+                            continue; 
+                        }
+
+                        const currentVal = board[nr][nc];
+                        
+                        if (currentVal === opponent) {
+                            blocked = true;
+                            break;
+                        } else if (currentVal === player) {
+                            friendlyCount++;
+                        } else if (currentVal === 0) {
+                            emptyCount++;
+                        }
+                    }
+                    
+                    if (blocked) continue;
+
+                    // 勝利: 味方5 (friendlyCount=5, emptyCount=0)
+                    // リーチ: 味方4 + 空き1 (friendlyCount=4, emptyCount=1)
+                    if (friendlyCount === 5 || (friendlyCount === 4 && emptyCount === 1)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+
+        /**
+         * 最適な手を探索 (シンプルな評価関数を使用)
+         * * 【修正点】相手のアガリ阻止をAIのアガリの次に最優先で行うロジックを追加しました。
+         */
+        function findBestMove(player) {
+            let bestScore = -Infinity;
+            let bestMove = null;
+            
+            const availableMoves = getAvailableMoves();
+            const opponent = player === PLAYER_HUMAN ? PLAYER_AI : PLAYER_HUMAN; // 相手プレイヤー
+
+            for (const move of availableMoves) {
+                const { r, c } = move;
+                
+                // --- 1. AIの勝利手（アガリ）の絶対優先チェック ---
+                // この手 (r, c) を打てばAIが勝てる場合、即座に決定。
+                board[r][c] = player;
+                if (checkWin(r, c, player)) {
+                    board[r][c] = 0; // 盤面を元に戻す
+                    // 勝利は他の何よりも優先されるため、最大スコアで即座に返す
+                    return { bestMove: move, bestScore: SCORE_WEIGHTS[5] * 2 };
+                }
+                board[r][c] = 0; // 盤面を元に戻す
+                
+                // --- 2. 相手の勝利手（アガリ）の絶対防御チェック ---
+                // この手 (r, c) は、相手のアガリマスを埋めているか？
+                // (r, c) に相手が置いた場合に勝てるかどうかで判断する。
+                board[r][c] = opponent; 
+                if (checkWin(r, c, opponent)) {
+                    board[r][c] = 0; // 盤面を元に戻す
+                    // 相手の即座の勝利を阻止できる手は、AI勝利の次に優先
+                    // スコアはAI勝利より少し低く設定
+                    return { bestMove: move, bestScore: SCORE_WEIGHTS[5] * 1.5 };
+                }
+                board[r][c] = 0; // 盤面を元に戻す
+                // --------------------------------------------------
+
+                // 3. スコアを計算 (攻撃)
+                board[r][c] = player; // AIが置いた状態での攻撃力
+                const currentScore = evaluateBoard(player);
+                board[r][c] = 0; // 盤面を元に戻す
+
+                // 4. 相手の評価（防御） - 既存のスコアリングロジック
+                // (r, c) に相手が置いた場合の評価（相手にとっての攻撃力）
+                board[r][c] = opponent; 
+                const opponentScore = evaluateBoard(opponent);
+                board[r][c] = 0;
+
+                // 最終スコア: 自分の攻撃スコア + 相手の脅威スコア (防御を重視)
+                let score = currentScore + opponentScore * DEFENSE_MULTIPLIER;
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+            }
+
+            return { bestMove, bestScore };
+        }
+        
+        /**
+         * 評価関数: 盤面上の連続した石の数を数えてスコアを計算
+         */
+        function evaluateBoard(player) {
+            let totalScore = 0;
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]]; 
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] !== 0) continue; 
+
+                    for (const [dr, dc] of directions) {
+                        let scoreP = getLineScore(r, c, dr, dc, player);
+                        totalScore += scoreP;
+                    }
+                }
+            }
+            return totalScore;
+        }
+
+        /**
+         * 指定された方向における連続の評価スコアを計算する
+         */
+        function getLineScore(r, c, dr, dc, player) {
+            let score = 0;
+            const consecutive1 = countConsecutive(r, c, dr, dc, player);
+            const consecutive2 = countConsecutive(r, c, -dr, -dc, player);
+            
+            const maxConsecutive = consecutive1 + consecutive2 + 1; // 実際に置いた場合の連続数
+            
+            if (maxConsecutive >= 5) {
+                return SCORE_WEIGHTS[5];
+            }
+            
+            if (maxConsecutive >= 1) {
+                score += SCORE_WEIGHTS[maxConsecutive] || 0;
+            }
+            
+            return score;
+        }
+
+        /**
+         * 置ける場所をすべて取得 (石の周囲2マスのみ)
+         */
+        function getAvailableMoves() {
+            const moves = [];
+            const considered = new Set();
+            
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] !== 0) {
+                        for (let dr = -2; dr <= 2; dr++) {
+                            for (let dc = -2; dc <= 2; dc++) {
+                                const nr = r + dr;
+                                const nc = c + dc;
+                                
+                                if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === 0) {
+                                    const key = `${nr},${nc}`;
+                                    if (!considered.has(key)) {
+                                        moves.push({ r: nr, c: nc });
+                                        considered.add(key);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 最初の1手の場合
+            if (moves.length === 0) {
+                moves.push({ r: 7, c: 7 });
+            }
+            
+            return moves;
+        }
+
+        // --- 勝利判定ロジック ---
+
+        /**
+         * 勝利条件（5つ連続）を満たしているかチェックします。
+         */
+        function checkWin(r, c, player) {
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]]; // 縦、横、斜め2種
+
+            for (const [dr, dc] of directions) {
+                const count1 = countConsecutive(r, c, dr, dc, player);
+                const count2 = countConsecutive(r, c, -dr, -dc, player);
+                
+                if (count1 + 1 + count2 >= 5) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * 特定のセルから指定した方向に連続している石の数を数えます。
+         */
+        function countConsecutive(r, c, dr, dc, player) {
+            let count = 0;
+            for (let k = 1; k < BOARD_SIZE; k++) {
+                const nr = r + dr * k;
+                const nc = c + dc * k;
+                
+                if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === player) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+            return count;
+        }
+
+        /**
+         * 勝利ラインをハイライトします。
+         */
+        function highlightWinningLine(r, c, player) {
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]]; 
+
+            for (const [dr, dc] of directions) {
+                const count1 = countConsecutive(r, c, dr, dc, player);
+                const count2 = countConsecutive(r, c, -dr, -dc, player);
+                
+                if (count1 + 1 + count2 >= 5) {
+                    let startR = r - dr * count2;
+                    let startC = c - dc * count2;
+                    const length = count1 + count2 + 1;
+
+                    for (let i = 0; i < length; i++) {
+                        const wr = startR + dr * i;
+                        const wc = startC + dc * i;
+                        
+                        const cellElement = boardElement.querySelector(`[data-row="${wr}"][data-col="${wc}"]`);
+                        const pieceElement = cellElement ? cellElement.querySelector('.piece') : null;
+                        if (pieceElement) {
+                            pieceElement.classList.add('winning-piece');
+                        }
+                    }
+                    return; // 最初の勝利ラインを見つけたら終了
+                }
+            }
+        }
+        
+        /**
+         * 引き分けかどうかを判定する
+         */
+        function isDraw() {
+            return board.flat().filter(p => p !== 0).length === BOARD_SIZE * BOARD_SIZE;
+        }
+
+    </script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-start py-2 px-2 font-sans overflow-hidden">
+
+    <div id="game-container" class="max-w-xl w-full flex flex-col items-center p-2 bg-white rounded-xl shadow-2xl h-full">
+        <!-- タイトルエリア -->
+        <div class="flex items-center justify-center space-x-2 w-full pt-2 pb-2">
+            <h1 class="text-2xl font-extrabold text-center text-gray-800">五目並べ (AI対戦版)</h1>
+        </div>
+        
+        <!-- AI思考中表示エリア (簡略化) -->
+        <div id="thinking-indicator" class="w-full h-8 text-center text-blue-700 font-bold transition-opacity duration-300">
+            <!-- AI思考中のテキストがJSによって挿入されます -->
+        </div>
+
+        <!-- ステータスとタイマーエリア -->
+        <div id="status" class="w-full p-2 text-center rounded-xl shadow-md transition-colors duration-300 bg-blue-500 text-white mb-2">
+            <p id="status-text" class="font-semibold text-base">ゲーム開始！</p>
+            <p id="timer" class="text-xs mt-1">持ち時間: 10秒</p>
+        </div>
+        
+        <!-- 盤面コンテナ -->
+        <div id="board-wrapper" class="flex justify-center items-center flex-grow w-full py-2">
+            <div id="board" class="board-grid">
+                <!-- 交点セルはJavaScriptで生成されます -->
+            </div>
+        </div>
+
+        <!-- コントロールエリア -->
+        <div class="flex justify-center w-full pb-2">
+            <button id="reset-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-full shadow-lg transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                リセット
+            </button>
+        </div>
+    </div>
+</body>
+</html>
