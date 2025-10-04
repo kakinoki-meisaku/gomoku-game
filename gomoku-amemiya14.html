@@ -31,8 +31,8 @@
             width: min(80vmin, 350px); 
             height: min(80vmin, 350px);
             aspect-ratio: 1 / 1; 
-            background-color: #F8D395; /* 碁盤の色 */
-            border: 4px solid #4a2d10;
+            background-color: #73C2FB; /* 碁盤の色 */
+            border: 4px solid #4CA6E7;
             box-shadow: 0 10px 15px rgba(0, 0, 0, 0.3);
             margin: 0 auto; 
             border-radius: 8px;
@@ -40,9 +40,9 @@
             --interval: calc(100% / 14); 
             /* 碁盤の線を描画 */
             background-image: 
-                linear-gradient(to right, #7D4C28 1px, transparent 1px),
-                linear-gradient(to bottom, #7D4C28 1px, transparent 1px),
-                radial-gradient(circle at center, #7D4C28 4px, transparent 5px); 
+                linear-gradient(to right, #F4FBFE 1px, transparent 1px),
+                linear-gradient(to bottom, #F4FBFE 1px, transparent 1px),
+                radial-gradient(circle at center, #F4FBFE 4px, transparent 5px); 
             background-repeat: repeat, repeat, no-repeat; 
             background-size: var(--interval) var(--interval);
             background-position: 
@@ -58,7 +58,7 @@
             width: calc(100% / 15); 
             height: calc(100% / 15);
             cursor: pointer;
-            z-index: 20; /* 修正: キャラクター画像(15)より上、リセットボタン(60)より下 */
+            z-index: 20;
         }
         .piece {
             position: absolute;
@@ -133,6 +133,7 @@
         @media (max-width: 768px) {
             
             #character-and-message {
+                /* 修正済み: キャラクターの高さを250pxに拡大 */
                 height: 220px; 
                 max-height: 220px; 
                 max-width: 100%; 
@@ -142,10 +143,12 @@
             }
             
             #char-image-container {
+                 /* 修正済み: 画像コンテナの高さを250pxに拡大 */
                  height: 220px; 
                  width: auto;
             }
             #char-image {
+                /* 修正済み: キャラクター画像を220pxに拡大 */
                 max-height: 220px !important; 
                 width: auto !important; 
                 margin-top: 10px;
@@ -200,7 +203,7 @@
 
     <script>
         // ゲーム定数 
-        const BOARD_SIZE = 15; 
+        const BOARD_SIZE = 15;
         const PLAYER_HUMAN = 1; 
         const PLAYER_AI = 2;    
         const AI_NAME = "アメミヤチカ"; 
@@ -275,7 +278,7 @@
 
         // --- 雨粒の設定 ---
         const DROP_COUNT = 80; 
-        const DROP_COLOR = 'rgba(70, 90, 110, 0.85)'; // 修正: 見やすい濃い色に変更
+        const DROP_COLOR = 'rgba(70, 90, 110, 0.85)'; 
         const DROP_LENGTH_MIN = 10;
         const DROP_LENGTH_MAX = 20;
         const DROP_SPEED_MIN = 5;
@@ -336,7 +339,7 @@
                 H = window.innerHeight; 
                 this.x = Math.random() * W;
                 this.y = -20 - (Math.random() * 300);
-                this.length = Math.random() * (DROP_LENGTH_MAX - DROP_LENGTH_MIN) + DROP_LENGTH_MIN;
+                this.length = Math.random() * (DROP_LENGTH_MIN - DROP_LENGTH_MIN) + DROP_LENGTH_MIN;
                 this.speed = Math.random() * (DROP_SPEED_MAX - DROP_SPEED_MIN) + DROP_SPEED_MIN;
                 this.opacity = Math.random() * 0.5 + 0.2; 
             }
@@ -350,8 +353,7 @@
 
             draw() {
                 rainCtx.beginPath();
-                // DROP_COLOR を使用。opacityは draw 関数内でランダム設定されている
-                rainCtx.strokeStyle = DROP_COLOR.replace(/0\.\d+/, this.opacity.toFixed(2));
+                rainCtx.strokeStyle = DROP_COLOR.replace('0.7', this.opacity.toFixed(2));
                 rainCtx.lineWidth = 1.5;
                 rainCtx.lineCap = 'round';
                 rainCtx.moveTo(this.x, this.y);
@@ -667,11 +669,6 @@
             if (thinkingIndicator) thinkingIndicator.textContent = "";
 
             clearInterval(timerInterval);
-            
-            // ★ 修正 2: 人間が着手した直後、AIのターンに移る前に笑顔を設定する
-            // 疲労モードが始まっても、次の switchTurn で 'tired' が上書きされる
-            setCharacterMood('smile'); 
-            
             placePiece(r, c, PLAYER_HUMAN, null); 
         }
 
@@ -693,12 +690,6 @@
             if (checkWin(r, c, player)) {
                 gameActive = false;
                 stopRain(); 
-                
-                // ★ 勝利時にタイマー表示を非表示にする（念のため残す）
-                if (timerElement) {
-                    timerElement.style.display = 'none'; 
-                }
-
                 const winnerText = player === PLAYER_HUMAN ? `あなた（黒）` : `${AI_NAME}（白）`; 
                 const statusType = player === PLAYER_HUMAN ? 'win' : 'loss';
                 updateStatus(`【勝利】${winnerText}の勝ちです！`, statusType);
@@ -713,7 +704,6 @@
             }
         }
 
-        // --- 修正された switchTurn 関数 (L584から) ---
         async function switchTurn(threatType = null) {
             currentPlayer = currentPlayer === PLAYER_HUMAN ? PLAYER_AI : PLAYER_HUMAN;
             renderGame();
@@ -722,65 +712,72 @@
             
             let message = `${turnText}のターンです。`;
             
-            // moveCount は 0-indexed で、FATIGUE_THRESHOLD に達した時点から疲労モード
-            const isFatigued = moveCount >= FATIGUE_THRESHOLD - 1; 
+            // 修正: moveCount >= FATIGUE_THRESHOLD に修正（石が25個以上なら疲労モード）
+            const isFatigued = moveCount >= FATIGUE_THRESHOLD; 
             
             if (gameActive) {
                 if (isFatigued) {
                     startRain(); 
                     
                     if (!hasAnnouncedFatigue) {
-                        setCharacterMood('tired'); // ★ (1) 最初の疲労モード開始時のみ疲労の顔を設定
+                        setCharacterMood('tired'); // 疲労アナウンス時は tired
                         const fatigueMsg = getRandomMessage('FATIGUE_START');
                         updateStatus(fatigueMsg, 'tired');
                         await new Promise(resolve => setTimeout(resolve, 1500));
                         hasAnnouncedFatigue = true;
                     }
-                    
-                    // ★ 修正箇所 (2): 疲労モード中は、脅威がない限り表情を「疲労」に強制維持
-                    if (hasAnnouncedFatigue && threatType !== 'reach' && threatType !== 'win_confirmed') {
-                        setCharacterMood('tired'); // ターン切り替えのたびに疲労の顔を再設定
-                    }
-                    
-                    message = currentPlayer === PLAYER_HUMAN ? `(疲労モード) ${turnText}のターンです。` : `${AI_NAME}のターンです。`;
 
+                    // リーチ/勝確の脅威が直前に発生した場合、AIターンに移る前に'reach'を優先
+                    if (threatType === 'reach' || threatType === 'win_confirmed') {
+                        setCharacterMood('reach');
+                        const threatName = threatType === 'reach' ? 'リーチ' : '勝確';
+                        message = currentPlayer === PLAYER_HUMAN ? `【AIの${threatName}】あなたのターンです。` : `${AI_NAME}のターンです。`;
+                    } else {
+                        // 疲労モード中、脅威がない場合は 'tired' に固定（人間のターンをtiredにするためのコアロジック）
+                        setCharacterMood('tired');
+                        if (currentPlayer === PLAYER_HUMAN) {
+                            message = `(疲労モード) ${turnText}のターンです。`;
+                        } else {
+                            message = `${AI_NAME}のターンです。`;
+                        }
+                    }
                 } else {
                     stopRain();
                     hasAnnouncedFatigue = false; 
                     
-                    // 脅威がない場合はここで 'normal' にリセット
-                    // ★ 修正 1: この setCharacterMood('normal') を削除 (L611-L613を削除)
-                    // 表情の制御は、人間のターン終了時(handleCellClick)とAIのターン開始時(aiTurn)で行う
+                    if (threatType === 'reach' || threatType === 'win_confirmed') {
+                         setCharacterMood('reach');
+                         const threatName = threatType === 'reach' ? 'リーチ' : '勝確';
+                         message = currentPlayer === PLAYER_HUMAN ? `【AIの${threatName}】あなたのターンです。` : `${AI_NAME}のターンです。`;
+                    } else { 
+                        setCharacterMood('normal');
+                        if (currentPlayer === PLAYER_AI) {
+                             message = `${AI_NAME}のターンです。`;
+                        }
+                    }
                 }
             } else {
                 stopRain();
-                // 勝敗時の表情は updateStatus で設定されるためここでは不要
+                setCharacterMood('normal');
             }
             
-            // 脅威や疲労モードのアナウンスが既にされている場合は、上書きせずに終了
-            // AI着手後の人間のターンで、疲れ顔を維持しつつメッセージを更新するために必要
-            if (hasAnnouncedFatigue && isFatigued && threatType !== 'win_confirmed' && threatType !== 'reach') {
-                updateStatus(message, 'tired');
-                return;
-            }
-
             if (threatType === 'win_confirmed') {
                  updateStatus(message, 'win_confirmed'); 
             } else if (threatType === 'reach') {
                  updateStatus(message, 'reach');
             } else {
-                 updateStatus(message, isFatigued ? 'tired' : 'normal'); // ★ 疲労モードなら tired の背景/ステータスを維持
+                 updateStatus(message, isFatigued ? 'tired' : 'normal');
             }
             
             statusElement.style.display = 'block'; 
             if(currentPlayer === PLAYER_AI) {
                  thinkingIndicator.textContent = ""; 
+                 // renderGameでsetTimeoutが呼ばれるため、ここでは表示するだけ
                  thinkingIndicator.style.display = 'block';
             } else {
                  thinkingIndicator.style.display = 'none';
             }
         }
-        // --- switchTurn 関数 終了 ---
         
         /**
          * ステータス表示の更新
@@ -795,15 +792,8 @@
             
             statusDiv.classList.add('p-3');
             statusElement.style.display = 'block';
-            
-            // ★ 修正: ゲームがアクティブでない場合は、タイマーと思考中インジケーターの両方を非表示にする
-            if (gameActive) {
-                timerElement.style.display = currentPlayer === PLAYER_HUMAN ? 'block' : 'none';
-                thinkingIndicator.style.display = currentPlayer === PLAYER_AI ? 'block' : 'none';
-            } else {
-                timerElement.style.display = 'none';
-                thinkingIndicator.style.display = 'none';
-            }
+            timerElement.style.display = currentPlayer === PLAYER_HUMAN ? 'block' : 'none';
+            thinkingIndicator.style.display = currentPlayer === PLAYER_AI ? 'block' : 'none';
 
 
             if (type === 'win') { 
@@ -826,7 +816,6 @@
                 setCharacterMood('reach');
             } else if (type === 'tired') {
                  statusDiv.classList.add('bg-gray-700', 'shadow-gray-700/80');
-                 // setCharacterMood('tired') は switchTurn/aiTurn で管理するためここでは不要
             } else {
                 statusDiv.classList.add('bg-blue-500', 'shadow-blue-500/80');
             }
@@ -1123,7 +1112,8 @@
 
             if (thinkingIndicator) thinkingIndicator.textContent = "思考中..."; 
             
-            setCharacterMood('thinking'); // ★ 思考の表情を設定
+            // 修正1: 疲労モードかどうかに関わらず、思考中は 'thinking' にする
+            setCharacterMood('thinking'); 
 
             await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500)); 
             
@@ -1190,7 +1180,25 @@
 
             await placePiece(finalMove.r, finalMove.c, PLAYER_AI, threatType);
             
-            // L898-L908にあった、AI着手後の表情設定ロジックは削除済みです。
+            if (gameActive) {
+                // placePieceでmoveCountが増えている
+                const isCurrentFatigued = (moveCount) >= FATIGUE_THRESHOLD; 
+                
+                if (!threatType) {
+                    // 修正2: 脅威がない場合のみ、疲労モードに応じて表情を戻す
+                    if (isCurrentFatigued) {
+                        // 疲労モードであれば tired に戻す
+                        setCharacterMood('tired'); 
+                    } else {
+                        // 非疲労モードであれば smile にする
+                        setCharacterMood('smile');
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
+                } else {
+                    // 修正3: 脅威（リーチ/勝確）がある場合は、何もしない（reach の表情を維持）
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
+                }
+            }
         }
         
         // --- 補助関数 ---
