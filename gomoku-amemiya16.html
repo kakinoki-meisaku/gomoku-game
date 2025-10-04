@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五目並べ (AI アメミヤチカ対戦版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 画面全体にキャンバスを広げ、スクロールバーを非表示にする */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0;
+            overflow: hidden;
+            background-color: #f3f4f6;
+        }
+
+        /* 雨のエフェクト用キャンバス */
+        #rainCanvas {
+            display: none; /* 初期状態では非表示 */
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 40; /* ゲームUIの上に配置 */
+            pointer-events: none; /* クリックイベントを下に透過させる */
+            opacity: 0.8;
+            transition: opacity 1s;
+        }
+        
+        /* 盤面コンテナのスタイル */
+        .board-grid {
+            width: min(80vmin, 350px); 
+            height: min(80vmin, 350px);
+            aspect-ratio: 1 / 1; 
+            background-color: #73C2FB; /* 碁盤の色 */
+            border: 4px solid #4CA6E7;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.3);
+            margin: 0 auto; 
+            border-radius: 8px;
+            position: relative; 
+            --interval: calc(100% / 14); 
+            /* 碁盤の線を描画 */
+            background-image: 
+                linear-gradient(to right, #F4FBFE 1px, transparent 1px),
+                linear-gradient(to bottom, #F4FBFE 1px, transparent 1px),
+                radial-gradient(circle at center, #F4FBFE 4px, transparent 5px); 
+            background-repeat: repeat, repeat, no-repeat; 
+            background-size: var(--interval) var(--interval);
+            background-position: 
+                0 0, 
+                0 0, 
+                calc(var(--interval) * 7) calc(var(--interval) * 7); 
+        }
+
+        /* 石のスタイル */
+        .cell {
+            position: absolute;
+            /* 15x15のグリッドの中心に合わせるため、幅/高さを調整 */
+            width: calc(100% / 15); 
+            height: calc(100% / 15);
+            cursor: pointer;
+            z-index: 20;
+        }
+        .piece {
+            position: absolute;
+            width: 90%; 
+            height: 90%;
+            /* 💡 修正: clip-pathを使って形状を強制的に円形にクリップする */
+            clip-path: circle(50%); 
+            /* 修正: border-radius: 50%; がbox-shadowを円形にするために必要 */
+            border-radius: 50%; 
+            pointer-events: none; 
+            /* 影の初期値 (薄い影) */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); 
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0); 
+            animation: placePiece 0.15s forwards; 
+            
+            /* 画像調整 */
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        @keyframes placePiece {
+            from { transform: translate(-50%, -50%) scale(0); }
+            to { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        /* 💡 新しいハイライト用のクラス (画像オーバーレイ方式) */
+        .last-move-highlight {
+            position: absolute;
+            /* 石の大きさに合わせる */
+            width: 90%; 
+            height: 90%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            
+            pointer-events: none;
+            z-index: 30; /* 石(z-index: 20)の上に置く */
+            
+            /* 透過赤丸のSVG画像を背景に設定 */
+            /* 修正: r=48 (外側へ) / stroke-width=10 (太く) */
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='none' stroke='%23FF4136' stroke-width='10' opacity='0.8'/></svg>");
+            background-size: 100%;
+            background-repeat: no-repeat;
+        }
+        
+        .winning-piece {
+            /* clip-pathとborder-radius: 50%により、この影が円形になる */
+            box-shadow: 0 0 10px 4px gold, 0 1px 3px rgba(0, 0, 0, 0.8);
+        }
+
+        /* キャラクターとメッセージエリアのスタイル調整 */
+        #character-and-message {
+            max-width: min(90vw, 450px); 
+            width: 100%; 
+            margin: 0 auto;
+            /* 修正済み: キャラクター領域を400pxに拡大 */
+            height: 400px; 
+            display: flex; 
+            justify-content: center;
+            align-items: flex-end; 
+            padding-bottom: 0; 
+            position: relative; 
+        }
+        
+        /* 画像コンテナのスタイル */
+        #char-image-container {
+            position: relative; 
+            /* 修正済み: キャラクター領域を400pxに拡大 */
+            height: 400px; 
+            width: auto; 
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            overflow: visible; 
+        }
+
+        /* キャラクター画像 */
+        #char-image {
+            width: 100%; 
+            /* 修正済み: キャラクター画像を400pxに拡大 */
+            max-height: 400px !important; 
+            object-fit: contain; 
+            position: relative; 
+            z-index: 15;      
+            opacity: 1;       
+            transition: opacity 0.3s;
+            min-width: 100px; 
+        }
+
+        /* --- モバイルでのレイアウト調整 --- */
+        @media (max-width: 768px) {
+            
+            #character-and-message {
+                /* 修正済み: キャラクターの高さを220pxに拡大 */
+                height: 220px; 
+                max-height: 220px; 
+                max-width: 100%; 
+                padding: 0 1rem;
+                flex-direction: row; 
+                align-items: flex-end;
+            }
+            
+            #char-image-container {
+                 /* 修正済み: 画像コンテナの高さを220pxに拡大 */
+                 height: 220px; 
+                 width: auto;
+            }
+            #char-image {
+                /* 修正済み: キャラクター画像を220pxに拡大 */
+                max-height: 220px !important; 
+                width: auto !important; 
+                margin-top: 10px;
+            }
+            
+            #speech-bubble {
+                position: absolute !important; 
+                width: 90% !important;
+                transform: translateX(-50%) !important; 
+                margin-top: 0;
+                margin-bottom: 0;
+                left: 50% !important; 
+                bottom: 2px !important; 
+            }
+        }
+
+        /* --- 修正: ボードの上に重ねるボタンのスタイル --- */
+        #board-wrapper {
+             /* 必須: 子要素の絶対配置の基準とする */
+            position: relative; 
+        }
+
+        #reset-button-container {
+            /* 碁盤の上に重ねる */
+            position: absolute; 
+            /* ボードの中央に配置 */
+            top: 50%; 
+            left: 50%;
+            /* コンテンツのサイズに応じて中央に補正 */
+            transform: translate(-50%, -50%) scale(0.8);
+            
+            /* 修正: パディングを削減し、ボタンが改行しないように幅を狭める */
+            padding: 20px 30px; 
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            opacity: 0;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            z-index: 60; /* 碁盤や雨エフェクトの上に配置 */
+            pointer-events: none; /* 初期状態ではクリック透過 */
+        }
+        
+        /* ボタン表示時のアニメーション */
+        .show-reset-button {
+            opacity: 1 !important;
+            transform: translate(-50%, -50%) scale(1) !important;
+            pointer-events: auto !important; /* 表示されたらクリック可能に */
+        }
+
+    </style>
+
+    <script>
+        // ゲーム定数 
+        const BOARD_SIZE = 15;
+        const PLAYER_HUMAN = 1; 
+        const PLAYER_AI = 2;    
+        const AI_NAME = "アメミヤチカ"; 
+        const TURN_TIME_LIMIT = 10; 
+        
+        // --- 疲弊モード設定 ---
+        const FATIGUE_THRESHOLD = 25; // 25手で疲弊モードに入る
+        const FATIGUE_ERROR_CHANCE = 0.50; // 50%の確率で最善手以外の手を打つ 
+
+        // AIの評価値
+        const SCORE_WEIGHTS = { 0: 0, 1: 1, 2: 10, 3: 10000, 4: 1000000, 5: 10000000 };
+        const IMAGE_BASE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amemiya_";
+        
+        // --- 修正: 石の画像URL定義 ---
+        const BLACK_STONE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/kuroishi.png";
+        const WHITE_STONE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/shiroishi.png";
+        
+        // 相手の勝利阻止（即座の5連ブロック）のスコア
+        const BLOCK_BONUS = 15000000; 
+        // 勝利スコア (最優先: 5連になった場合)
+        const WIN_SCORE = SCORE_WEIGHTS[5] * 2; // 20,000,000 
+        // 活四 (両辺空き) スコア - 勝利より少し低いが、ブロックより高い
+        const OPEN_FOUR_WIN_SCORE = 19000000; // 19,000,000
+        
+        // --- ランダムメッセージリスト ---
+        const RANDOM_MESSAGES = {
+            // 活四または双活三による勝確時
+            WIN_CONFIRMED: [
+                "さばきのおじかんでしゅ",
+                "勝利の確率１００％",
+                "この展開を待ってたぜー！"
+            ],
+            // 単一の四連によるリーチ時
+            REACH: [
+                "リーチかも～",
+                "なんとかなるなる～",
+                "そこでいいのかなー"
+            ],
+            // 疲労モード突入時のアナウンス
+            FATIGUE_START: [
+                "疲れてきちゃったなぁ...",
+                "ねむい～...",
+                "おやつたべたいでしゅ～"
+            ]
+        };
+
+        let board = [];
+        let currentPlayer = PLAYER_HUMAN;
+        let gameActive = true;
+        // lastMoveを正確に保持することで、赤い枠の表示を安定させる
+        let lastMove = null; 
+        let timerInterval = null;
+        let timeRemaining = TURN_TIME_LIMIT;
+        let moveCount = 0; // 現在盤面にある石の総数
+        
+        // --- 疲労モード突入時メッセージ表示用フラグ ---
+        let hasAnnouncedFatigue = false; 
+
+        let statusElement;
+        let boardElement;
+        let timerElement;
+        let thinkingIndicator;
+        let charImageElement;
+        let speechBubbleElement; 
+        // --- 修正: モーダル要素からボタンコンテナ要素へ ---
+        let resetButtonContainerElement; 
+        let modalResetButton; 
+
+        // --- 雨エフェクト用 グローバル変数 ---
+        var W = window.innerWidth; 
+        var H = window.innerHeight; 
+        let rainCanvas;
+        let rainCtx;
+        let drops = [];
+        let rainAnimationId = null;
+
+        // --- 雨粒の設定 ---
+        const DROP_COUNT = 80; 
+        const DROP_COLOR = 'rgba(70, 90, 110, 0.85)'; 
+        const DROP_LENGTH_MIN = 10;
+        const DROP_LENGTH_MAX = 20;
+        const DROP_SPEED_MIN = 5;
+        const DROP_SPEED_MAX = 12;
+
+        /**
+         * 指定されたメッセージタイプからランダムなメッセージを取得
+         * @param {string} type - 'WIN_CONFIRMED', 'REACH', 'FATIGUE_START'
+         */
+        function getRandomMessage(type) {
+            const messages = RANDOM_MESSAGES[type];
+            if (!messages || messages.length === 0) {
+                return `[ERROR: No messages for ${type}]`;
+            }
+            const randomIndex = Math.floor(Math.random() * messages.length);
+            return messages[randomIndex];
+        }
+
+        /**
+         * 盤面の初期化とUIのセットアップ
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            speechBubbleElement = document.getElementById('speech-bubble'); 
+            statusElement = document.getElementById('status-text');
+            timerElement = document.getElementById('timer');
+            thinkingIndicator = document.getElementById('thinking-indicator'); 
+            charImageElement = document.getElementById('char-image'); 
+            boardElement = document.getElementById('board');
+            rainCanvas = document.getElementById('rainCanvas');
+            rainCtx = rainCanvas.getContext('2d');
+            
+            // --- 修正: ボタンコンテナ要素の取得とイベント設定 ---
+            resetButtonContainerElement = document.getElementById('reset-button-container'); 
+            modalResetButton = document.getElementById('modal-reset-button');
+
+            window.addEventListener('resize', () => {
+                if (rainAnimationId !== null) {
+                    initRain();
+                }
+            });
+
+            initializeBoardUI();
+            initializeGame();
+            
+            // ボタンにリセット動作を設定
+            modalResetButton.addEventListener('click', initializeGame);
+        });
+        
+        // --- 雨エフェクト関連ロジック (省略) ---
+        class Raindrop {
+            constructor() {
+                this.reposition();
+                this.y = Math.random() * H; 
+            }
+
+            reposition() {
+                W = window.innerWidth; 
+                H = window.innerHeight; 
+                this.x = Math.random() * W;
+                this.y = -20 - (Math.random() * 300);
+                this.length = Math.random() * (DROP_LENGTH_MIN - DROP_LENGTH_MIN) + DROP_LENGTH_MIN;
+                this.speed = Math.random() * (DROP_SPEED_MAX - DROP_SPEED_MIN) + DROP_SPEED_MIN;
+                this.opacity = Math.random() * 0.5 + 0.2; 
+            }
+
+            fall() {
+                this.y += this.speed;
+                if (this.y > H) {
+                    this.reposition();
+                }
+            }
+
+            draw() {
+                rainCtx.beginPath();
+                rainCtx.strokeStyle = DROP_COLOR.replace('0.7', this.opacity.toFixed(2));
+                rainCtx.lineWidth = 1.5;
+                rainCtx.lineCap = 'round';
+                rainCtx.moveTo(this.x, this.y);
+                rainCtx.lineTo(this.x, this.y + this.length);
+                rainCtx.stroke();
+            }
+        }
+
+        function initRain() {
+            W = window.innerWidth;
+            H = window.innerHeight;
+            rainCanvas.width = W;
+            rainCanvas.height = H;
+            
+            drops = [];
+            for (let i = 0; i < DROP_COUNT; i++) {
+                drops.push(new Raindrop());
+                drops[i].y = Math.random() * H; 
+            }
+        }
+
+        function animateRain() {
+            rainCtx.clearRect(0, 0, W, H);
+            
+            for (let i = 0; i < drops.length; i++) {
+                drops[i].fall();
+                drops[i].draw();
+            }
+            
+            if (rainAnimationId !== null) {
+                rainAnimationId = requestAnimationFrame(animateRain);
+            }
+        }
+
+        function startRain() {
+            if (rainAnimationId === null) {
+                initRain(); 
+                rainCanvas.style.display = 'block';
+                rainAnimationId = requestAnimationFrame(animateRain);
+            }
+        }
+
+        function stopRain() {
+            if (rainAnimationId !== null) {
+                cancelAnimationFrame(rainAnimationId);
+                rainAnimationId = null;
+                rainCanvas.style.display = 'none';
+            }
+        }
+
+
+        // --- ゲーム本体ロジック ---
+        
+        /**
+         * ゲーム状態を初期化
+         */
+        function initializeGame() {
+            board = Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(0));
+            currentPlayer = PLAYER_HUMAN;
+            gameActive = true;
+            lastMove = null;
+            moveCount = 0;
+            hasAnnouncedFatigue = false; 
+            
+            clearInterval(timerInterval);
+            timeRemaining = TURN_TIME_LIMIT;
+            
+            if (timerElement) {
+                timerElement.innerHTML = `持ち時間: <span class="text-lg font-extrabold">${TURN_TIME_LIMIT}</span> 秒`;
+            }
+            
+            if (thinkingIndicator) thinkingIndicator.textContent = ""; 
+            
+            stopRain(); 
+            setCharacterMood('normal'); 
+            updateStatus(`対局開始！あなた（黒）のターンです。`);
+
+            // --- 修正: ボタンコンテナを非表示に戻す ---
+            if (resetButtonContainerElement) {
+                resetButtonContainerElement.classList.remove('show-reset-button'); 
+                // アニメーションのために遅延させてからdisplay: none
+                setTimeout(() => { resetButtonContainerElement.style.display = 'none'; }, 300); 
+            }
+            
+            renderGame();
+        }
+        
+        /**
+         * キャラクターの表情を切り替える関数
+         * @param {string} mood - 'normal', 'win', 'loss', 'thinking', 'smile', 'reach', 'tired'
+         */
+        function setCharacterMood(mood) {
+            if (!charImageElement) return;
+
+            let suffix = 'normal.png'; 
+
+            if (mood === 'win') {
+                suffix = 'win.png'; 
+            } else if (mood === 'loss') {
+                suffix = 'lose.png'; 
+            } else if (mood === 'thinking') {
+                suffix = 'think.png'; 
+            } else if (mood === 'smile') {
+                suffix = 'smile.png'; 
+            } else if (mood === 'reach') { 
+                suffix = 'reach01.png'; 
+            } else if (mood === 'tired') { 
+                suffix = 'tired.png'; 
+            }
+            
+            const path = IMAGE_BASE_URL + suffix;
+            
+            charImageElement.onerror = () => {
+                charImageElement.src = 'https://placehold.co/160x160/cccccc/333333?text=Char';
+            };
+            
+            charImageElement.src = path;
+        }
+
+        
+        function initializeBoardUI() {
+            if (!boardElement) return;
+            boardElement.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    
+                    // 盤面の交点にセルを配置
+                    const interval = 100 / (BOARD_SIZE - 1);
+                    const leftPos = c * interval; 
+                    const topPos = r * interval;
+                    
+                    cell.style.left = `${leftPos}%`;
+                    cell.style.top = `${topPos}%`;
+                    cell.style.transform = 'translate(-50%, -50%)'; 
+                    
+                    cell.addEventListener('click', () => handleCellClick(r, c));
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+        
+        function renderGame() {
+            if (!boardElement || !timerElement || !thinkingIndicator) return;
+
+            const cells = boardElement.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                const r = parseInt(cell.dataset.row);
+                const c = parseInt(cell.dataset.col);
+                const player = board[r][c];
+
+                cell.innerHTML = ''; 
+                
+                if (player !== 0) {
+                    const piece = document.createElement('div');
+                    piece.classList.add('piece');
+                    
+                    // --- 修正: 画像を適用 ---
+                    if (player === PLAYER_HUMAN) {
+                        piece.style.backgroundImage = `url('${BLACK_STONE_URL}')`;
+                    } else {
+                        piece.style.backgroundImage = `url('${WHITE_STONE_URL}')`;
+                    }
+                    piece.style.backgroundColor = 'transparent'; // 背景色は透明に
+                    
+                    // 💡 修正: ここでpieceを追加
+                    cell.appendChild(piece);
+                    
+                    // --- 💡 新規追加: 最後に置いた石の上にハイライトを重ねる ---
+                    if (lastMove && lastMove.r === r && lastMove.c === c) {
+                        const highlight = document.createElement('div');
+                        highlight.classList.add('last-move-highlight');
+                        // piece(z:20)よりも上に配置される(z:30)
+                        cell.appendChild(highlight); 
+                    }
+                    // ----------------------------------------------------
+                }
+            });
+
+            if (!gameActive && lastMove) {
+                // 勝利線ハイライト
+                const winningCoords = findWinningLine(lastMove.r, lastMove.c, lastMove.player);
+                if (winningCoords) {
+                    highlightWinningLine(winningCoords);
+                }
+                // --- 修正: ゲーム終了時にボタンコンテナを表示 ---
+                if (resetButtonContainerElement) {
+                    resetButtonContainerElement.style.display = 'block'; 
+                    resetButtonContainerElement.classList.add('show-reset-button'); 
+                }
+
+            } else if (!gameActive && !lastMove) { 
+                // --- 修正: 時間切れなどの際に lastMove が null の場合もボタンを表示 ---
+                 if (resetButtonContainerElement) {
+                    resetButtonContainerElement.style.display = 'block'; 
+                    resetButtonContainerElement.classList.add('show-reset-button'); 
+                }
+            } else if (gameActive) {
+                // ゲーム中はボタンコンテナを非表示
+                if (resetButtonContainerElement) {
+                    resetButtonContainerElement.classList.remove('show-reset-button'); 
+                    // アニメーションのために遅延させてからdisplay: none
+                    setTimeout(() => { resetButtonContainerElement.style.display = 'none'; }, 300); 
+                }
+
+                clearInterval(timerInterval);
+                if (currentPlayer === PLAYER_HUMAN) {
+                    // 人間のターンでは思考中インジケータを非表示
+                    thinkingIndicator.textContent = ""; 
+                    thinkingIndicator.style.display = 'none'; 
+                    if (moveCount > 0) { 
+                        startTimer();
+                    } else {
+                        timerElement.innerHTML = "最初の1手は時間無制限です";
+                        timerElement.style.display = 'block'; 
+                    }
+                } else {
+                    // 修正: AIターン時はタイマーを非表示にし、思考中インジケータを表示
+                    timerElement.style.display = 'none'; 
+                    thinkingIndicator.style.display = 'block'; 
+                    // AIの思考開始
+                    setTimeout(() => { if (gameActive) aiTurn(); }, 500); 
+                }
+            }
+        }
+
+        function highlightWinningLine(coords) {
+            coords.forEach(([r, c]) => {
+                const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+                if (cell) {
+                    cell.querySelector('.piece')?.classList.add('winning-piece');
+                }
+            });
+        }
+
+        function findWinningLine(r, c, player) {
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1]
+            ];
+            
+            for (const [dr, dc] of directions) {
+                let line = [];
+                let maxCount = 0;
+                let winningStones = [];
+
+                for (let i = -4; i <= 4; i++) {
+                    const nr = r + i * dr;
+                    const nc = c + i * dc;
+
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                        if (board[nr][nc] === player) {
+                            line.push([nr, nc]);
+                        } else {
+                            if (line.length > maxCount) {
+                                maxCount = line.length;
+                                winningStones = [...line];
+                            }
+                            line = [];
+                        }
+                    } else {
+                         if (line.length > maxCount) {
+                            maxCount = line.length;
+                            winningStones = [...line];
+                        }
+                        line = [];
+                    }
+                }
+                if (line.length > maxCount) {
+                    maxCount = line.length;
+                    winningStones = [...line];
+                }
+
+                if (maxCount >= 5) {
+                    return winningStones.slice(0, 5);
+                }
+            }
+            return null;
+        }
+
+        
+        function startTimer() {
+            if (!timerElement || !speechBubbleElement) return;
+
+            timeRemaining = TURN_TIME_LIMIT;
+            
+            const statusDiv = speechBubbleElement;
+            statusDiv.classList.remove('bg-red-400', 'bg-red-500', 'bg-red-600', 'shadow-red-400/80', 'shadow-red-500/80', 'shadow-red-600/80', 'animate-pulse');
+            statusDiv.classList.add('bg-blue-500', 'shadow-blue-500/80'); 
+
+            // 人間のターンではタイマーを表示
+            timerElement.innerHTML = `残り時間: <span class="text-lg font-extrabold">${timeRemaining}</span> 秒`;
+            timerElement.style.display = 'block'; 
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                
+                timerElement.innerHTML = `残り時間: <span class="text-lg font-extrabold">${timeRemaining}</span> 秒`;
+
+                statusDiv.classList.remove('bg-red-400', 'bg-red-500', 'bg-red-600', 'shadow-red-400/80', 'shadow-red-500/80', 'shadow-red-600/80', 'animate-pulse');
+                statusDiv.classList.remove('bg-blue-500', 'shadow-blue-500/80'); 
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    handleTimeOut();
+                } else if (timeRemaining <= 3) {
+                    if (timeRemaining === 3) {
+                        statusDiv.classList.add('bg-red-400', 'shadow-red-400/80');
+                    } else if (timeRemaining === 2) {
+                        statusDiv.classList.add('bg-red-500', 'shadow-red-500/80');
+                    } else if (timeRemaining === 1) {
+                        statusDiv.classList.add('bg-red-600', 'shadow-red-600/80', 'animate-pulse');
+                    }
+                } else {
+                     statusDiv.classList.add('bg-blue-500', 'shadow-blue-500/80'); 
+                }
+            }, 1000);
+        }
+
+        function handleTimeOut() {
+            gameActive = false;
+            stopRain();
+            if (thinkingIndicator) thinkingIndicator.textContent = ""; 
+            updateStatus(`【時間切れ】10秒以内に石を置けませんでした。${AI_NAME}（白）の勝ちです！`, 'loss'); 
+            renderGame(); 
+        }
+
+        function handleCellClick(r, c) {
+            if (!gameActive || currentPlayer !== PLAYER_HUMAN) return;
+            if (board[r][c] !== 0) return;
+            
+            if (thinkingIndicator) thinkingIndicator.textContent = "";
+
+            clearInterval(timerInterval);
+            placePiece(r, c, PLAYER_HUMAN, null); 
+        }
+
+        async function placePiece(r, c, player, threatType = null) {
+            if (board[r][c] !== 0) {
+                console.error(`Error: Tried to place piece at occupied cell (${r}, c).`);
+                gameActive = false;
+                updateStatus(`【エラー】無効な場所への着手が発生しました。ゲームをリセットしてください。`, 'draw');
+                return;
+            }
+            
+            board[r][c] = player;
+            lastMove = { r, c, player };
+            
+            moveCount++; 
+            
+            if (thinkingIndicator) thinkingIndicator.textContent = ""; 
+
+            if (checkWin(r, c, player)) {
+                gameActive = false;
+                stopRain(); 
+                const winnerText = player === PLAYER_HUMAN ? `あなた（黒）` : `${AI_NAME}（白）`; 
+                const statusType = player === PLAYER_HUMAN ? 'win' : 'loss';
+                updateStatus(`【勝利】${winnerText}の勝ちです！`, statusType);
+                renderGame(); 
+            } else if (isDraw()) {
+                gameActive = false;
+                stopRain(); 
+                updateStatus(`【引き分け】碁盤がすべて埋まりました。`, 'draw');
+                renderGame(); 
+            } else {
+                await switchTurn(threatType);
+            }
+        }
+
+        async function switchTurn(threatType = null) {
+            currentPlayer = currentPlayer === PLAYER_HUMAN ? PLAYER_AI : PLAYER_HUMAN;
+            renderGame();
+            
+            const turnText = currentPlayer === PLAYER_HUMAN ? `あなた（黒）` : `${AI_NAME}（白）`; 
+            
+            let message = `${turnText}のターンです。`;
+            
+            // 修正: moveCount >= FATIGUE_THRESHOLD に修正（石が25個以上なら疲労モード）
+            const isFatigued = moveCount >= FATIGUE_THRESHOLD; 
+            
+            if (gameActive) {
+                if (isFatigued) {
+                    startRain(); 
+                    
+                    if (!hasAnnouncedFatigue) {
+                        setCharacterMood('tired'); // 疲労アナウンス時は tired
+                        const fatigueMsg = getRandomMessage('FATIGUE_START');
+                        updateStatus(fatigueMsg, 'tired');
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        hasAnnouncedFatigue = true;
+                    }
+
+                    // リーチ/勝確の脅威が直前に発生した場合、AIターンに移る前に'reach'を優先
+                    if (threatType === 'reach' || threatType === 'win_confirmed') {
+                        setCharacterMood('reach');
+                        const threatName = threatType === 'reach' ? 'リーチ' : '勝確';
+                        message = currentPlayer === PLAYER_HUMAN ? `【AIの${threatName}】あなたのターンです。` : `${AI_NAME}のターンです。`;
+                    } else {
+                        // 疲労モード中、脅威がない場合は 'tired' に固定（人間のターンをtiredにするためのコアロジック）
+                        setCharacterMood('tired');
+                        if (currentPlayer === PLAYER_HUMAN) {
+                            message = `(疲労モード) ${turnText}のターンです。`;
+                        } else {
+                            message = `${AI_NAME}のターンです。`;
+                        }
+                    }
+                } else {
+                    stopRain();
+                    hasAnnouncedFatigue = false; 
+                    
+                    if (threatType === 'reach' || threatType === 'win_confirmed') {
+                         setCharacterMood('reach');
+                         const threatName = threatType === 'reach' ? 'リーチ' : '勝確';
+                         message = currentPlayer === PLAYER_HUMAN ? `【AIの${threatName}】あなたのターンです。` : `${AI_NAME}のターンです。`;
+                    } else { 
+                        setCharacterMood('normal');
+                        if (currentPlayer === PLAYER_AI) {
+                             message = `${AI_NAME}のターンです。`;
+                        }
+                    }
+                }
+            } else {
+                stopRain();
+                setCharacterMood('normal');
+            }
+            
+            if (threatType === 'win_confirmed') {
+                 updateStatus(message, 'win_confirmed'); 
+            } else if (threatType === 'reach') {
+                 updateStatus(message, 'reach');
+            } else {
+                 updateStatus(message, isFatigued ? 'tired' : 'normal');
+            }
+            
+            statusElement.style.display = 'block'; 
+            if(currentPlayer === PLAYER_AI) {
+                 thinkingIndicator.textContent = ""; 
+                 // renderGameでsetTimeoutが呼ばれるため、ここでは表示するだけ
+                 thinkingIndicator.style.display = 'block';
+            } else {
+                 thinkingIndicator.style.display = 'none';
+            }
+        }
+        
+        /**
+         * ステータス表示の更新
+         */
+        function updateStatus(message, type = 'normal') {
+            if (!statusElement || !speechBubbleElement) return; 
+            
+            statusElement.textContent = message;
+            
+            const statusDiv = speechBubbleElement;
+            statusDiv.className = 'absolute z-20 md:w-80 w-[90%] p-3 rounded-xl shadow-2xl transition-colors duration-300 left-1/2 -translate-x-1/2 bottom-2 text-white';
+            
+            statusDiv.classList.add('p-3');
+            statusElement.style.display = 'block';
+            timerElement.style.display = currentPlayer === PLAYER_HUMAN ? 'block' : 'none';
+            thinkingIndicator.style.display = currentPlayer === PLAYER_AI ? 'block' : 'none';
+
+
+            if (type === 'win') { 
+                statusDiv.classList.add('bg-green-500', 'shadow-green-500/80'); 
+                setCharacterMood('loss'); 
+            } else if (type === 'loss') { 
+                statusDiv.classList.add('bg-red-500', 'shadow-red-500/80');
+                setCharacterMood('win'); 
+                stopRain(); 
+            } else if (type === 'draw') {
+                statusDiv.classList.remove('text-white');
+                statusDiv.classList.add('bg-yellow-400', 'text-gray-800', 'shadow-yellow-400/80');
+                setCharacterMood('normal');
+                stopRain(); 
+            } else if (type === 'win_confirmed') { 
+                statusDiv.classList.add('bg-red-700', 'shadow-red-700/80');
+                setCharacterMood('reach'); 
+            } else if (type === 'reach') {
+                statusDiv.classList.add('bg-pink-600', 'shadow-pink-600/80');
+                setCharacterMood('reach');
+            } else if (type === 'tired') {
+                 statusDiv.classList.add('bg-gray-700', 'shadow-gray-700/80');
+            } else {
+                statusDiv.classList.add('bg-blue-500', 'shadow-blue-500/80');
+            }
+        }
+        
+        // --- AIロジック (省略) ---
+        function checkWin(r, c, player) {
+            return findWinningLine(r, c, player) !== null;
+        }
+
+        function countConsecutive(r, c, dr, dc, player) {
+            let count = 0;
+            let openEnds = 0;
+            let blocked = 0;
+            const opponent = 3 - player;
+
+            let currentR = r + dr;
+            let currentC = c + dc;
+            while (currentR >= 0 && currentR < BOARD_SIZE && currentC >= 0 && currentC < BOARD_SIZE && board[currentR][currentC] === player) {
+                count++;
+                currentR += dr;
+                currentC += dc;
+            }
+
+            if (currentR >= 0 && currentR < BOARD_SIZE && currentC >= 0 && currentC < BOARD_SIZE && board[currentR][currentC] === 0) {
+                openEnds++;
+            } else if (currentR < 0 || currentR >= BOARD_SIZE || currentC < 0 || currentC >= BOARD_SIZE || board[currentR][currentC] === opponent) {
+                blocked++;
+            }
+
+            currentR = r - dr;
+            currentC = c - dc;
+            while (currentR >= 0 && currentR < BOARD_SIZE && currentC >= 0 && currentC < BOARD_SIZE && board[currentR][currentC] === player) {
+                count++;
+                currentR -= dr;
+                currentC -= dc;
+            }
+
+            if (currentR >= 0 && currentR < BOARD_SIZE && currentC >= 0 && currentC < BOARD_SIZE && board[currentR][currentC] === 0) {
+                openEnds++;
+            } else if (currentR < 0 || currentR >= BOARD_SIZE || currentC < 0 || currentC >= BOARD_SIZE || board[currentR][currentC] === opponent) {
+                blocked++;
+            }
+            
+            return { count: count + 1, openEnds, blocked: blocked > 0 };
+        }
+
+        function getLineScore(r, c, dr, dc, player) {
+            const result = countConsecutive(r, c, dr, dc, player);
+            
+            if (result.count >= 5) {
+                return WIN_SCORE;
+            }
+            
+            if (result.count === 4) {
+                if (result.openEnds === 2) {
+                    return OPEN_FOUR_WIN_SCORE; 
+                }
+                if (result.openEnds >= 1) {
+                    return SCORE_WEIGHTS[4]; 
+                }
+            }
+            
+            if (result.count === 3) {
+                if (result.openEnds === 2) {
+                    return SCORE_WEIGHTS[3]; 
+                }
+                if (result.openEnds === 1) {
+                    return SCORE_WEIGHTS[2]; 
+                }
+            }
+
+            if (result.count === 2 && result.openEnds === 2) {
+                return SCORE_WEIGHTS[1];
+            }
+            
+            if (result.blocked || result.openEnds === 0) {
+                return 0;
+            }
+
+            return 0;
+        }
+        
+        function checkOpenFour(r, c, player) {
+            board[r][c] = player; 
+            
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1]
+            ];
+            
+            for (const [dr, dc] of directions) {
+                const result = countConsecutive(r, c, dr, dc, player);
+                
+                if (result.count === 4 && result.openEnds === 2) {
+                    board[r][c] = 0; 
+                    return true;
+                }
+            }
+            
+            board[r][c] = 0; 
+            return false;
+        }
+        
+        function checkDoubleOpenThree(r, c, player) {
+            board[r][c] = player; 
+            
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1]
+            ];
+            let openThreeCount = 0;
+            
+            for (const [dr, dc] of directions) {
+                const result = countConsecutive(r, c, dr, dc, player);
+                
+                if (result.count === 3 && result.openEnds === 2) {
+                    openThreeCount++;
+                }
+            }
+            
+            board[r][c] = 0; 
+
+            return openThreeCount >= 2;
+        }
+
+
+        function checkThreateningLine(r, c, player) {
+            board[r][c] = player; 
+            const directions = [ [0, 1], [1, 0], [1, 1], [1, -1] ];
+            const opponent = 3 - player;
+
+            for (const [dr, dc] of directions) {
+                for (let i = -4; i <= 0; i++) {
+                    let p_count = 0;      
+                    let empty_count = 0;  
+                    let opponent_found = false; 
+
+                    for (let j = 0; j < 5; j++) {
+                        const cr = r + (i + j) * dr;
+                        const cc = c + (i + j) * dc;
+
+                        if (cr < 0 || cr >= BOARD_SIZE || cc < 0 || cc >= BOARD_SIZE) {
+                            opponent_found = true;
+                            break;
+                        }
+                        
+                        const piece = board[cr][cc];
+                        if (piece === player) {
+                            p_count++;
+                        } else if (piece === 0) {
+                            empty_count++;
+                        } else if (piece === opponent) {
+                            opponent_found = true;
+                            break; 
+                        }
+                    }
+
+                    if (p_count === 4 && empty_count === 1 && !opponent_found) {
+                        board[r][c] = 0; 
+                        return true;
+                    }
+                }
+            }
+
+            board[r][c] = 0; 
+            return false;
+        }
+        
+        function getAvailableMoves() {
+            const moves = [];
+            const checkRange = 3; 
+            
+            const occupied = [];
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] !== 0) {
+                        occupied.push({ r, c });
+                    }
+                }
+            }
+
+            const candidateCoords = new Set();
+            
+            if (occupied.length === 0) {
+                const centerR = Math.floor(BOARD_SIZE / 2);
+                const centerC = Math.floor(BOARD_SIZE / 2);
+                for (let r = centerR - 1; r <= centerR + 1; r++) {
+                    for (let c = centerC - 1; c <= centerC + 1; c++) {
+                        if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+                            moves.push({r, c});
+                        }
+                    }
+                }
+                return moves.length > 0 ? moves : [{r: centerR, c: centerC}];
+            } else {
+                occupied.forEach(({ r, c }) => {
+                    for (let dr = -checkRange; dr <= checkRange; dr++) {
+                        for (let dc = -checkRange; dc <= checkRange; dc++) {
+                            const newR = r + dr;
+                            const newC = c + dc;
+                            
+                            if (newR >= 0 && newR < BOARD_SIZE && newC >= 0 && newC < BOARD_SIZE && board[newR][newC] === 0) {
+                                candidateCoords.add(`${newR},${newC}`);
+                            }
+                        }
+                    }
+                });
+            }
+
+            candidateCoords.forEach(coordStr => {
+                const [r, c] = coordStr.split(',').map(Number);
+                moves.push({ r, c });
+            });
+
+            if (moves.length === 0 && moveCount < BOARD_SIZE * BOARD_SIZE) {
+                for (let r = 0; r < BOARD_SIZE; r++) {
+                    for (let c = 0; c < BOARD_SIZE; c++) {
+                        if (board[r][c] === 0) {
+                            moves.push({ r, c });
+                            return moves; 
+                        }
+                    }
+                }
+            }
+
+            return moves;
+        }
+        
+        function findBestMove(player) {
+            const opponent = 3 - player;
+            const availableMoves = getAvailableMoves();
+            const scoredMoves = [];
+
+            if (availableMoves.length === 0) {
+                return [];
+            }
+            
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1] 
+            ];
+
+            for (const move of availableMoves) {
+                const { r, c } = move;
+                let score = 0;
+                
+                board[r][c] = player;
+                if (checkWin(r, c, player)) {
+                    board[r][c] = 0;
+                    return [{ move: {r, c}, score: WIN_SCORE }]; 
+                }
+                board[r][c] = 0; 
+
+                board[r][c] = opponent; 
+                if (checkWin(r, c, opponent)) {
+                    board[r][c] = 0; 
+                    score += BLOCK_BONUS; 
+                }
+                board[r][c] = 0; 
+                
+                board[r][c] = player; 
+                let defenseScore = 0;
+                board[r][c] = opponent; 
+                for (const [dr, dc] of directions) {
+                    const opponentLineScore = getLineScore(r, c, dr, dc, opponent);
+                    defenseScore = Math.max(defenseScore, opponentLineScore);
+                }
+                board[r][c] = 0;
+                
+                score += defenseScore * 2; 
+                
+                board[r][c] = player;
+                let selfScore = 0;
+                for (const [dr, dc] of directions) {
+                    selfScore += getLineScore(r, c, dr, dc, player);
+                }
+                
+                board[r][c] = 0;
+                
+                score += selfScore;
+
+                const center = Math.floor(BOARD_SIZE / 2);
+                const distance = Math.max(Math.abs(r - center), Math.abs(c - center));
+                score += (BOARD_SIZE - distance) * 5; 
+
+                scoredMoves.push({ move: { r, c }, score });
+            }
+
+            scoredMoves.sort((a, b) => b.score - a.score);
+
+            return scoredMoves;
+        }
+
+        async function aiTurn() { 
+            if (!gameActive) { if (thinkingIndicator) thinkingIndicator.textContent = ""; return; } 
+
+            if (thinkingIndicator) thinkingIndicator.textContent = "思考中..."; 
+            
+            // 修正1: 疲労モードかどうかに関わらず、思考中は 'thinking' にする
+            setCharacterMood('thinking'); 
+
+            await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500)); 
+            
+            if (!gameActive) { if (thinkingIndicator) thinkingIndicator.textContent = ""; return; } 
+
+            const scoredMoves = findBestMove(PLAYER_AI);
+            
+            if (scoredMoves.length === 0) {
+                 if (thinkingIndicator) thinkingIndicator.textContent = "";
+                 await switchTurn(null);
+                 return;
+            }
+
+            let bestMove = scoredMoves[0]?.move;
+            const topScore = scoredMoves[0]?.score || 0; 
+            
+            const isImmediateWin = topScore === WIN_SCORE; 
+            
+            const moveNumberToPlay = moveCount + 1; 
+            const isFatigued = moveNumberToPlay >= FATIGUE_THRESHOLD;
+            let finalMove = bestMove;
+
+            if (isFatigued && !isImmediateWin && scoredMoves.length > 1) { 
+                if (Math.random() < FATIGUE_ERROR_CHANCE) { 
+                    finalMove = scoredMoves[1].move; 
+                    console.log(`AI Fatigue: Chose 2nd best move. Error Chance: ${FATIGUE_ERROR_CHANCE}`);
+                }
+            }
+
+            board[finalMove.r][finalMove.c] = PLAYER_AI; 
+            const isFinalMoveImmediateWin = checkWin(finalMove.r, finalMove.c, PLAYER_AI);
+            board[finalMove.r][finalMove.c] = 0; 
+
+            
+            const isFinalMoveOpenFour = checkOpenFour(finalMove.r, finalMove.c, PLAYER_AI); 
+            const isSingleFourThreat = checkThreateningLine(finalMove.r, finalMove.c, PLAYER_AI); 
+
+
+            let threatType = null;
+
+            if (!isFinalMoveImmediateWin) { 
+                if (isFinalMoveOpenFour) {
+                    threatType = 'win_confirmed';
+                } 
+            }
+
+            if (threatType !== 'win_confirmed' && isSingleFourThreat && !isFinalMoveImmediateWin) { 
+                threatType = 'reach';
+            }
+
+            if (thinkingIndicator) thinkingIndicator.textContent = ""; 
+            
+            if (threatType === 'win_confirmed') {
+                const winMsg = getRandomMessage('WIN_CONFIRMED');
+                updateStatus(winMsg, 'win_confirmed'); 
+                await new Promise(resolve => setTimeout(resolve, 800)); 
+            } else if (threatType === 'reach') { 
+                const reachMsg = getRandomMessage('REACH');
+                updateStatus(reachMsg, 'reach'); 
+                await new Promise(resolve => setTimeout(resolve, 800)); 
+            }
+            
+            if (!gameActive) { if (thinkingIndicator) thinkingIndicator.textContent = ""; return; } 
+
+            await placePiece(finalMove.r, finalMove.c, PLAYER_AI, threatType);
+            
+            if (gameActive) {
+                // placePieceでmoveCountが増えている
+                const isCurrentFatigued = (moveCount) >= FATIGUE_THRESHOLD; 
+                
+                if (!threatType) {
+                    // 修正2: 脅威がない場合のみ、疲労モードに応じて表情を戻す
+                    if (isCurrentFatigued) {
+                        // 疲労モードであれば tired に戻す
+                        setCharacterMood('tired'); 
+                    } else {
+                        // 非疲労モードであれば smile にする
+                        setCharacterMood('smile');
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
+                } else {
+                    // 修正3: 脅威（リーチ/勝確）がある場合は、何もしない（reach の表情を維持）
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
+                }
+            }
+        }
+        
+        // --- 補助関数 ---
+
+        function isDraw() { 
+            return moveCount === BOARD_SIZE * BOARD_SIZE;
+        }
+        
+    </script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-start py-2 px-2 font-sans overflow-hidden">
+    
+    <canvas id="rainCanvas"></canvas>
+
+    <div id="game-container" class="max-w-4xl w-full flex flex-col items-center p-2 bg-white rounded-xl shadow-2xl relative z-10">
+        
+        <div class="flex items-center justify-center space-x-2 w-full pt-1 pb-1 flex-shrink-0">
+            </div>
+        
+        <div id="character-and-message" 
+             class="relative flex justify-center px-4 flex-shrink-0"
+             style="max-width: min(90vw, 450px); width: 100%; margin: 0 auto; height: 400px; align-items: flex-end; padding-bottom: 0;">
+            
+            <div id="char-image-container" class="relative">
+                <img id="char-image" 
+                    src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amemiya_normal.png" 
+                    alt="AIキャラクター アメミヤチカ" 
+                    class="h-auto rounded-lg object-contain relative z-15"
+                    style="min-width: 100px;">
+            </div>
+
+            <div id="speech-bubble" 
+                 class="absolute z-20 md:w-80 w-[90%] p-3 rounded-xl shadow-2xl transition-colors duration-300
+                 bg-blue-500 text-white shadow-blue-500/80
+                 left-1/2 -translate-x-1/2 bottom-2">
+                <p id="status-text" class="font-semibold text-sm">対局開始！あなた（黒）のターンです。</p>
+                <p id="timer" class="text-sm mt-1">持ち時間: 10秒</p>
+                <div id="thinking-indicator" class="w-full h-4 text-center text-white font-bold transition-opacity duration-300 text-xs mt-1">
+                </div>
+            </div>
+        </div>
+
+        <div id="game-area" class="flex w-full justify-center max-w-5xl flex-grow">
+            
+            <div id="board-wrapper" class="flex flex-col items-center max-w-full justify-center h-full relative">
+                <div id="board" class="board-grid">
+                    </div>
+                    
+                <div id="reset-button-container" style="display: none;">
+                    <button id="modal-reset-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-150 ease-in-out transform hover:scale-105 active:scale-95 text-base">
+                        もう一回
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+</body>
+</html>
