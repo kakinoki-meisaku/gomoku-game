@@ -305,7 +305,7 @@
         const VOICE_BASE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/voice/";
         // ★★★ NEW: BGMのURLと音量 ★★★
         const BGM_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/bgm_game.mp3";
-        const BGM_VOLUME = 0.30; // 30%の音量
+        const BGM_VOLUME = 0.20; // 20%の音量
         let gameBGM = null; // BGM用のAudioオブジェクト
 
         // ★★★ NEW: 石を置く効果音の設定 ★★★
@@ -567,6 +567,17 @@
             }, 700); 
         }
 
+        /**
+         * 指定時間（2秒）後にリセットボタンを表示する
+         * NOTE: renderGame() と handleTimeOut() の両方で利用するため関数化
+         */
+        function showResetButton() {
+            if (resetButtonContainerElement) {
+                resetButtonContainerElement.style.display = 'block'; 
+                resetButtonContainerElement.classList.add('show-reset-button'); 
+            }
+        }
+        
         /**
          * 盤面の初期化とUIのセットアップ
          */
@@ -838,24 +849,25 @@
                 }
             });
 
-            if (!gameActive && lastMove) {
+            if (!gameActive) { // ★修正: ゲーム終了判定を統合
                 // 勝利線ハイライト
-                const winningCoords = findWinningLine(lastMove.r, lastMove.c, lastMove.player);
-                if (winningCoords) {
-                    highlightWinningLine(winningCoords);
+                if (lastMove) {
+                    const winningCoords = findWinningLine(lastMove.r, lastMove.c, lastMove.player);
+                    if (winningCoords) {
+                        highlightWinningLine(winningCoords);
+                    }
                 }
-                // --- 修正: ゲーム終了時にボタンコンテナを表示 ---
-                if (resetButtonContainerElement) {
-                    resetButtonContainerElement.style.display = 'block'; 
-                    resetButtonContainerElement.classList.add('show-reset-button'); 
-                }
-
-            } else if (!gameActive && !lastMove) { 
-                // --- 修正: 時間切れなどの際に lastMove が null の場合もボタンを表示 ---
-                 if (resetButtonContainerElement) {
-                    resetButtonContainerElement.style.display = 'block'; 
-                    resetButtonContainerElement.classList.add('show-reset-button'); 
-                }
+                
+                // --- 修正: ボタン表示を遅延関数に任せる ---
+                // NOTE: renderGameが呼ばれるとすぐに次の処理に移ってしまうため、
+                // showResetButtonの呼び出しは、handleTimeOutおよびplacePieceから
+                // 直接 setTimeout 経由で行うように変更します。
+                
+                // ただし、renderGameがゲーム終了時に呼ばれるケースに対応するため、
+                // ここで遅延呼び出しを残します。
+                // 重複呼び出しは問題ありません (opacityアニメーションのみが動くため)
+                // setTimeout(showResetButton, 2000); // ★コメントアウト: 意図的にplacePieceとhandleTimeOutに処理を委譲
+                
             } else if (gameActive) {
                 // ゲーム中はボタンコンテナを非表示
                 if (resetButtonContainerElement) {
@@ -980,6 +992,7 @@
 
         function handleTimeOut() {
             gameActive = false;
+            clearInterval(timerInterval); // ★修正: 時間切れなのでタイマーも停止
             stopRain();
             // ★★★ 修正: ゲーム終了時にBGMを停止 ★★★
             stopBGM(); 
@@ -990,6 +1003,9 @@
             playVoice(TIMEOUT_VOICES); 
 
             renderGame(); 
+            
+            // --- NEW: 2秒後にリセットボタンを表示 ---
+            setTimeout(showResetButton, 2000); 
         }
 
         function handleCellClick(r, c) {
@@ -1007,6 +1023,8 @@
                 console.error(`Error: Tried to place piece at occupied cell (${r}, c).`);
                 gameActive = false;
                 updateStatus(`【エラー】無効な場所への着手が発生しました。ゲームをリセットしてください。`, 'draw');
+                // --- NEW: 2秒後にリセットボタンを表示 ---
+                setTimeout(showResetButton, 2000); 
                 return;
             }
             
@@ -1038,6 +1056,9 @@
                 }
 
                 renderGame(); 
+                // --- NEW: 2秒後にリセットボタンを表示 ---
+                setTimeout(showResetButton, 2000); 
+
             } else if (isDraw()) {
                 gameActive = false;
                 stopRain(); 
@@ -1045,6 +1066,8 @@
                 stopBGM(); 
                 updateStatus(`【引き分け】碁盤がすべて埋まりました。`, 'draw');
                 renderGame(); 
+                // --- NEW: 2秒後にリセットボタンを表示 ---
+                setTimeout(showResetButton, 2000); 
             } else {
                 await switchTurn(threatType);
             }
@@ -1700,4 +1723,4 @@
             
         </div>
     </div> </body>
-</html
+</html>
