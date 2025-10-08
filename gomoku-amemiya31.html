@@ -736,7 +736,7 @@
             if (thinkingIndicator) thinkingIndicator.textContent = ""; 
             
             stopRain(); 
-            setCharacterMood('normal'); 
+            setCharacterMood('normal', 'normal'); // ★修正: moodTypeを渡すように変更
             updateStatus(`対局開始！あなた（黒）のターンです。`, 'normal'); // updateStatusを呼び出し
 
             // --- 修正: ボタンコンテナを非表示に戻す ---
@@ -757,8 +757,9 @@
         /**
          * キャラクターの表情を切り替える関数
          * @param {string} mood - 'normal', 'win', 'loss', 'thinking', 'smile', 'reach', 'tired'
+         * @param {string} moodType - 'normal', 'win_confirmed', 'reach', 'tired' などの現在のゲーム状況を示すタイプ
          */
-        function setCharacterMood(mood) {
+        function setCharacterMood(mood, moodType = 'normal') {
             if (!charImageElement) return;
 
             let suffix = 'normal.png'; 
@@ -771,8 +772,17 @@
                 suffix = 'think.png'; 
             } else if (mood === 'smile') {
                 suffix = 'smile.png'; 
-            } else if (mood === 'reach') { 
-                suffix = 'reach01.png'; 
+            } else if (mood === 'reach') {
+                // ★★★ 修正ポイント: リーチのタイプによって画像を切り替える ★★★
+                if (moodType === 'win_confirmed') {
+                    // 勝確につながるリーチ (活四など)
+                    suffix = 'reach01.png'; 
+                } else if (moodType === 'reach') {
+                    // 単なるリーチ (四連など)
+                    suffix = 'reach02.png'; // 新しい画像
+                } else {
+                    suffix = 'reach01.png'; // デフォルトはreach01
+                }
             } else if (mood === 'tired') { 
                 suffix = 'tired.png'; 
             }
@@ -1091,7 +1101,7 @@
                     
                     // ↓↓↓ 修正が必要なブロック: hasAnnouncedFatigueのチェックとカウンターの利用 ↓↓↓
                     if (!hasAnnouncedFatigue && fatigueVoicePlayedCount === 0) { // ★修正点1: カウンターもチェック
-                        setCharacterMood('tired'); // 疲労アナウンス時は tired
+                        setCharacterMood('tired', 'tired'); // ★修正: moodTypeを渡すように変更
                         const fatigueMsg = getRandomMessage('FATIGUE_START');
                         message = fatigueMsg;
                         statusType = 'tired';
@@ -1118,19 +1128,25 @@
                     
                         // リーチ/勝確の脅威が直前に発生した場合、AIターンに移る前に'reach'を優先
                         if (threatType === 'reach' || threatType === 'win_confirmed') {
-                             // ... (既存ロジックそのまま)
+                             // statusType はそのまま threatType に上書き
+                             statusType = threatType;
+                             // setCharacterMood の呼び出しは updateStatus に任せる
                         } else {
                             // 疲労モード中、脅威がない場合は 'tired' に固定
-                            // ... (既存ロジックそのまま)
+                            // setCharacterMood の呼び出しは updateStatus に任せる
                         }
                     }
                     // ↑↑↑ 修正が必要なブロック ここまで ↑↑↑
                     
                 } else {
-                    // ... (既存の非疲労モードロジックそのまま)
+                    // 非疲労モードでも、直前に脅威があった場合は表情を維持
+                    if (threatType === 'reach' || threatType === 'win_confirmed') {
+                        statusType = threatType;
+                        // setCharacterMood の呼び出しは updateStatus に任せる
+                    }
                 }
             } else {
-                // ... (既存のゲーム終了ロジックそのまま)
+                // ゲーム終了時は何もしない
             }
             
             // ★ 修正: メッセージ更新を確実にするため、updateStatusを呼び出す
@@ -1143,8 +1159,8 @@
         
         /**
          * ステータス表示の更新
-         * 💡 修正: renderGameとstartTimerでタイマー/インジケータの表示制御を統一したため、
-         * ここからタイマー/インジケータの表示制御ロジックを削除し、純粋なメッセージ更新関数とする。
+         * @param {string} message - 表示するメッセージ
+         * @param {string} type - 'normal', 'win', 'loss', 'draw', 'win_confirmed', 'reach', 'tired'
          */
         function updateStatus(message, type = 'normal') {
             if (!statusElement || !speechBubbleElement) return; 
@@ -1157,32 +1173,32 @@
             statusDiv.classList.add('p-3');
             statusElement.style.display = 'block';
 
-            // ★ 削除した行: renderGameとstartTimerで制御済みのため、フリーズの原因となる冗長な制御を削除。
-            // timerElement.style.display は renderGame で制御
-            // thinkingIndicator.style.display は renderGame で制御
-
+            // ★ 修正: タイプに応じて表情と色を更新 ★
             if (type === 'win') { 
                 statusDiv.classList.add('bg-green-500', 'shadow-green-500/80'); 
-                setCharacterMood('loss'); // 相手（AI）の敗北表情
+                setCharacterMood('loss', type); // 相手（AI）の敗北表情
             } else if (type === 'loss') { 
                 statusDiv.classList.add('bg-red-500', 'shadow-red-500/80');
-                setCharacterMood('win'); // 相手（AI）の勝利表情
+                setCharacterMood('win', type); // 相手（AI）の勝利表情
                 stopRain(); 
             } else if (type === 'draw') {
                 statusDiv.classList.remove('text-white');
                 statusDiv.classList.add('bg-yellow-400', 'text-gray-800', 'shadow-yellow-400/80');
-                setCharacterMood('normal');
+                setCharacterMood('normal', type);
                 stopRain(); 
             } else if (type === 'win_confirmed') { 
                 statusDiv.classList.add('bg-red-700', 'shadow-red-700/80');
-                setCharacterMood('reach'); // 勝確はリーチの表情を維持
+                setCharacterMood('reach', type); // ★修正: win_confirmedの表情（reach01）
             } else if (type === 'reach') {
                 statusDiv.classList.add('bg-pink-600', 'shadow-pink-600/80');
-                setCharacterMood('reach');
+                setCharacterMood('reach', type); // ★修正: reachの表情（reach02）
             } else if (type === 'tired') {
                  statusDiv.classList.add('bg-gray-700', 'shadow-gray-700/80');
+                 setCharacterMood('tired', type);
             } else {
+                // normal
                 statusDiv.classList.add('bg-blue-500', 'shadow-blue-500/80');
+                setCharacterMood('normal', type);
             }
         }
         
@@ -1479,7 +1495,7 @@
             if (thinkingIndicator) thinkingIndicator.textContent = "思考中..."; 
             
             // 修正1: 疲労モードかどうかに関わらず、思考中は 'thinking' にする
-            setCharacterMood('thinking'); 
+            setCharacterMood('thinking', 'thinking'); // ★修正: moodTypeを渡すように変更
 
             await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500)); 
             
@@ -1532,7 +1548,7 @@
                 } 
             }
 
-            if (threatType !== 'win_confirmed' && isSingleFourThreat && !isFinalMoveImmediateWin) { 
+            if (threatType === null && isSingleFourThreat && !isFinalMoveImmediateWin) { 
                 threatType = 'reach';
             }
 
@@ -1571,10 +1587,10 @@
                     // 脅威がない場合のみ、表情を戻す
                     if (isCurrentFatigued) {
                         // 疲労モードであれば tired に戻す
-                        setCharacterMood('tired'); 
+                        setCharacterMood('tired', 'tired'); // ★修正: moodTypeを渡すように変更
                     } else {
                         // 非疲労モードであれば smile にする
-                        setCharacterMood('smile');
+                        setCharacterMood('smile', 'smile'); // ★修正: moodTypeを渡すように変更
                     }
                     await new Promise(resolve => setTimeout(resolve, 500)); 
                 } else {
