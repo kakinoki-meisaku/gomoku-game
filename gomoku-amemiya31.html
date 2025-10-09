@@ -3,7 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>五目並べ (AI アメミヤチカ対戦版)</title>
+    <title>アメミヤチカと五目ならべ)</title>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-ENES4Q9772"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-ENES4Q9772');
+</script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* 画面全体にキャンバスを広げ、スクロールバーを非表示にする */
@@ -216,6 +225,39 @@
             transition: opacity 0.3s;
             min-width: 100px; 
         }
+        
+        /* --- NEW: スピーカーアイコンと設定メニューのスタイル --- */
+        #audio-control-icon {
+            position: absolute;
+            top: 10px; /* キャラクターの上部に配置 */
+            right: 10px; /* キャラクターの右側に配置 */
+            z-index: 50; /* キャラクター画像より上 */
+            cursor: pointer;
+            padding: 8px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.2s;
+        }
+        
+        #audio-control-icon:hover {
+            background-color: rgba(255, 255, 255, 1);
+        }
+
+        #audio-settings-menu {
+            position: absolute;
+            top: 40px; /* アイコンの下に配置 */
+            right: 0px; 
+            z-index: 55;
+            width: 200px;
+            padding: 12px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            display: none; /* 初期状態では非表示 */
+            flex-direction: column;
+            gap: 10px;
+        }
 
         /* --- モバイルでのレイアウト調整 --- */
         @media (max-width: 768px) {
@@ -250,6 +292,12 @@
                 margin-bottom: 0;
                 left: 50% !important; 
                 bottom: 2px !important; 
+            }
+            
+            /* モバイルでの調整 */
+            #audio-control-icon {
+                top: -30px; /* キャラクターのコンテナの外側に配置 */
+                right: 20px;
             }
         }
 
@@ -305,16 +353,16 @@
         const VOICE_BASE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/voice/";
         // ★★★ NEW: BGMのURLと音量 ★★★
         const BGM_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/bgm_game.mp3";
-        const BGM_VOLUME = 0.20; // 20%の音量
+        const BGM_VOLUME_DEFAULT = 0.20; // 20%の音量
         let gameBGM = null; // BGM用のAudioオブジェクト
 
         // ★★★ NEW: 石を置く効果音の設定 ★★★
         const PIECE_PUT_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_pieces_on.mp3";
-        const PIECE_PUT_SE_VOLUME = 0.50; // 50%の音量
+        const PIECE_PUT_SE_VOLUME_DEFAULT = 0.50; // 50%の音量
         
         // ★★★ 修正箇所1: スタート/リセットボタンの効果音の設定を追加 ★★★
         const PIKON_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_pikon.mp3";
-        const PIKON_SE_VOLUME = 0.50; // 50%の音量
+        const PIKON_SE_VOLUME_DEFAULT = 0.50; // 50%の音量
         // ------------------------------------
 
         const VOICE_CHANCE_PUT = 0.30; // 石を置いた時の音声再生確率 30%
@@ -420,7 +468,11 @@
         let startScreenElement;
         let startButtonElement;
         let gameWrapperElement; // #game-wrapper の要素
-
+        
+        // --- NEW: 音声設定関連のグローバル変数 ---
+        let isMuted = false;
+        let bgmVolume = BGM_VOLUME_DEFAULT;
+        let seVoiceVolume = 0.8; // デフォルトは0.8
 
         // --- 雨エフェクト用 グローバル変数 ---
         var W = window.innerWidth; 
@@ -451,6 +503,125 @@
             return messages[randomIndex];
         }
         
+        // --- NEW: 音声設定のロードと保存 ---
+        function loadAudioSettings() {
+            try {
+                const storedMuted = localStorage.getItem('isMuted');
+                const storedBgmVolume = localStorage.getItem('bgmVolume');
+                const storedSeVoiceVolume = localStorage.getItem('seVoiceVolume');
+
+                if (storedMuted !== null) {
+                    isMuted = storedMuted === 'true';
+                }
+                if (storedBgmVolume !== null) {
+                    bgmVolume = parseFloat(storedBgmVolume);
+                    if (gameBGM) gameBGM.volume = isMuted ? 0 : bgmVolume;
+                } else {
+                    bgmVolume = BGM_VOLUME_DEFAULT;
+                }
+                if (storedSeVoiceVolume !== null) {
+                    seVoiceVolume = parseFloat(storedSeVoiceVolume);
+                } else {
+                    seVoiceVolume = 0.8;
+                }
+            } catch (e) {
+                console.warn("Could not load audio settings from localStorage:", e);
+                // エラー時はデフォルト値を設定
+                isMuted = false;
+                bgmVolume = BGM_VOLUME_DEFAULT;
+                seVoiceVolume = 0.8;
+            }
+            // UIに反映
+            updateAudioSettingsUI();
+        }
+
+        function saveAudioSettings() {
+            try {
+                localStorage.setItem('isMuted', isMuted);
+                localStorage.setItem('bgmVolume', bgmVolume);
+                localStorage.setItem('seVoiceVolume', seVoiceVolume);
+            } catch (e) {
+                console.warn("Could not save audio settings to localStorage:", e);
+            }
+        }
+        
+        function updateAudioSettingsUI() {
+            const bgmSlider = document.getElementById('bgm-volume-slider');
+            const seVoiceSlider = document.getElementById('se-voice-volume-slider');
+            const muteButton = document.getElementById('mute-button');
+            const icon = document.getElementById('audio-icon');
+
+            if (bgmSlider) bgmSlider.value = isMuted ? 0 : bgmVolume * 100;
+            if (seVoiceSlider) seVoiceSlider.value = isMuted ? 0 : seVoiceVolume * 100;
+            
+            if (muteButton) {
+                muteButton.textContent = isMuted ? 'ミュート解除' : 'ミュート';
+                muteButton.classList.toggle('bg-gray-400', isMuted);
+                muteButton.classList.toggle('bg-blue-500', !isMuted);
+            }
+            
+            if (icon) {
+                 // スピーカーアイコンの SVG を変更する
+                 if (isMuted) {
+                    icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-gray-700"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M12 21a9 9 0 100-18 9 9 0 000 18zM14.25 7.75l-4.5 4.5m4.5 0l-4.5-4.5" /></svg>`;
+                 } else if (bgmVolume > 0 || seVoiceVolume > 0) {
+                     icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-gray-700"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.617a9.28 9.28 0 011.83 4.14M16.896 9.471a5.61 5.61 0 011.11 2.474M14.67 13.327a2.805 2.805 0 01.558 1.237m-2.254-7.854l-4.545 4.545-2.25-2.25-4.5 4.5" /></svg>`;
+                 } else {
+                     icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-gray-700"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M12 21a9 9 0 100-18 9 9 0 000 18zM14.25 7.75l-4.5 4.5m4.5 0l-4.5-4.5" /></svg>`;
+                 }
+            }
+            
+            // BGMの音量を更新
+            if (gameBGM) {
+                gameBGM.volume = isMuted ? 0 : bgmVolume;
+            }
+        }
+        
+        function toggleMute() {
+            isMuted = !isMuted;
+            // ミュート解除時にBGMを再生
+            if (!isMuted && gameBGM && gameBGM.paused) {
+                playBGM(); // 再生を試みる
+            }
+            // BGMの音量設定は updateAudioSettingsUI で行われる
+            updateAudioSettingsUI();
+            saveAudioSettings();
+        }
+
+        function handleBGMVolumeChange(event) {
+            const newVolume = event.target.value / 100;
+            bgmVolume = newVolume;
+            if (gameBGM) {
+                 gameBGM.volume = isMuted ? 0 : bgmVolume;
+            }
+            // スライダーが動いた場合はミュートを解除
+            if (isMuted && newVolume > 0) {
+                 isMuted = false;
+                 if (gameBGM && gameBGM.paused) {
+                    playBGM();
+                 }
+            } else if (newVolume === 0) {
+                 stopBGM();
+            }
+            updateAudioSettingsUI();
+            saveAudioSettings();
+        }
+
+        function handleSEVoiceVolumeChange(event) {
+            const newVolume = event.target.value / 100;
+            seVoiceVolume = newVolume;
+            // スライダーが動いた場合はミュートを解除
+            if (isMuted && newVolume > 0) {
+                 isMuted = false;
+                 if (gameBGM && gameBGM.paused) {
+                    playBGM();
+                 }
+            }
+            updateAudioSettingsUI();
+            saveAudioSettings();
+        }
+
+
         // --- 音声再生ロジック ---
 
         /**
@@ -460,6 +631,8 @@
          * @returns {boolean} - 音声再生が試みられたかどうか
          */
         function playVoice(fileNames, probability = 1.0) {
+            if (isMuted || seVoiceVolume === 0) return false;
+            
             if (Math.random() > probability) {
                 return false; 
             }
@@ -472,7 +645,8 @@
             
             // 新しいAudioオブジェクトを作成して再生
             const audioToPlay = new Audio(url);
-            audioToPlay.volume = 0.8; 
+            // グローバル設定された音量を適用
+            audioToPlay.volume = seVoiceVolume; 
             audioToPlay.play().catch(e => {
                 // 自動再生ポリシーに引っかかった場合などのエラーを無視
                 // console.warn("Audio play failed:", e.message);
@@ -480,16 +654,19 @@
             return true;
         }
         
-        // ★★★ NEW: 効果音再生関数 ★★★
+        // ★★★ NEW: 効果音再生関数 (音量調整適用) ★★★
         /**
          * 効果音 (SE) をロードし、再生します。
          * 他の音と重なっても再生されるように、新しいAudioオブジェクトを作成します。
          * @param {string} url - 再生する音声ファイルのURL
-         * @param {number} volume - 音量 (0.0から1.0)
+         * @param {number} defaultVolume - デフォルトの音量 (0.0から1.0)
          */
-        function playSE(url, volume) {
+        function playSE(url, defaultVolume) {
+            if (isMuted || seVoiceVolume === 0) return;
+            
             const audioToPlay = new Audio(url);
-            audioToPlay.volume = volume;
+            // グローバル設定された音量を適用
+            audioToPlay.volume = seVoiceVolume;
             
             audioToPlay.play().catch(e => {
                 // 自動再生ポリシーに引っかかった場合などのエラーを無視
@@ -501,6 +678,7 @@
         
         // ★★★ NEW: スタート画面の音声再生ロジック ★★★
         function playStartScreenVoice() {
+            if (isMuted || seVoiceVolume === 0) return;
             const chance = 0.8;
             
             // 80%で title_01_ame.mp3 を再生 (START_VOICES[0])
@@ -513,17 +691,20 @@
             }
         }
         
-        // ★★★ NEW: BGMの再生/再開/リセット関数 ★★★
+        // ★★★ NEW: BGMの再生/再開/リセット関数 (音量調整適用) ★★★
         function playBGM() {
+            if (isMuted || bgmVolume === 0) return;
+            
             if (!gameBGM) {
                 // BGMオブジェクトが存在しない場合は、ここで初期化
                 gameBGM = new Audio(BGM_URL);
                 gameBGM.loop = true; // ループ再生を設定
-                gameBGM.volume = BGM_VOLUME; // 音量を50%に設定
             }
             
             // 再生位置をリセットしてから再生
             gameBGM.currentTime = 0;
+            // グローバル設定された音量を適用
+            gameBGM.volume = bgmVolume; 
             
             // play()は非同期なので、Promiseのcatchでエラー処理
             gameBGM.play().catch(e => {
@@ -543,7 +724,7 @@
         // ★★★ NEW: スタートゲームロジック ★★★
         function startGame() {
             // ★★★ 修正箇所2: スタートボタン押下時の効果音再生を追加 ★★★
-            playSE(PIKON_SE_URL, PIKON_SE_VOLUME); 
+            playSE(PIKON_SE_URL, PIKON_SE_VOLUME_DEFAULT); 
             
             // 1. スタートボタン音声再生
             playVoice(START_BUTTON_VOICE, 1.0);
@@ -564,8 +745,24 @@
                 
                 // 5. ゲーム本体の初期化
                 initializeGame();
+                
+                // 6. 音声設定メニューアイコンを表示
+                document.getElementById('audio-control-icon').style.display = 'block';
             }, 700); 
         }
+        
+        // --- NEW: 音声設定メニュー表示/非表示トグル ---
+        function toggleAudioSettingsMenu() {
+            const menu = document.getElementById('audio-settings-menu');
+            if (menu.style.display === 'flex') {
+                menu.style.display = 'none';
+            } else {
+                menu.style.display = 'flex';
+                // 表示時に最新のUI設定を反映
+                updateAudioSettingsUI();
+            }
+        }
+
 
         /**
          * 指定時間（2秒）後にリセットボタンを表示する
@@ -600,6 +797,15 @@
             startButtonElement = document.getElementById('start-button');
             gameWrapperElement = document.getElementById('game-wrapper'); // 新規ラッパー
             const titleImageElement = document.getElementById('title-image');
+            
+            // --- NEW: 音声設定メニュー要素の取得とイベント設定 ---
+            document.getElementById('audio-control-icon').addEventListener('click', toggleAudioSettingsMenu);
+            document.getElementById('mute-button').addEventListener('click', toggleMute);
+            document.getElementById('bgm-volume-slider').addEventListener('input', handleBGMVolumeChange);
+            document.getElementById('se-voice-volume-slider').addEventListener('input', handleSEVoiceVolumeChange);
+            
+            // 起動時に音量設定をロード
+            loadAudioSettings();
 
             startButtonElement.addEventListener('click', startGame);
             titleImageElement.addEventListener('click', playStartScreenVoice);
@@ -618,14 +824,14 @@
             // ボタンにリセット動作を設定
             // ★★★ 修正箇所3: リセットボタン押下時の効果音再生を追加 ★★★
             modalResetButton.addEventListener('click', () => {
-                playSE(PIKON_SE_URL, PIKON_SE_VOLUME); // リセットボタン押下時の効果音
+                playSE(PIKON_SE_URL, PIKON_SE_VOLUME_DEFAULT); // リセットボタン押下時の効果音
                 playBGM(); // リセットボタン押下時はBGMを最初から再生
                 initializeGame();
             });
             
         });
         
-        // --- 雨エフェクト関連ロジック ---
+        // --- 雨エフェクト関連ロジック (変更なし) ---
         class Raindrop {
             constructor() {
                 this.reposition();
@@ -738,6 +944,11 @@
             stopRain(); 
             setCharacterMood('normal', 'normal'); // ★修正: moodTypeを渡すように変更
             updateStatus(`対局開始！あなた（黒）のターンです。`, 'normal'); // updateStatusを呼び出し
+            
+            // --- NEW: 音声設定メニューを非表示に ---
+            const audioSettingsMenu = document.getElementById('audio-settings-menu');
+            if (audioSettingsMenu) audioSettingsMenu.style.display = 'none';
+
 
             // --- 修正: ボタンコンテナを非表示に戻す ---
             if (resetButtonContainerElement) {
@@ -867,16 +1078,6 @@
                         highlightWinningLine(winningCoords);
                     }
                 }
-                
-                // --- 修正: ボタン表示を遅延関数に任せる ---
-                // NOTE: renderGameが呼ばれるとすぐに次の処理に移ってしまうため、
-                // showResetButtonの呼び出しは、handleTimeOutおよびplacePieceから
-                // 直接 setTimeout 経由で行うように変更します。
-                
-                // ただし、renderGameがゲーム終了時に呼ばれるケースに対応するため、
-                // ここで遅延呼び出しを残します。
-                // 重複呼び出しは問題ありません (opacityアニメーションのみが動くため)
-                // setTimeout(showResetButton, 2000); // ★コメントアウト: 意図的にplacePieceとhandleTimeOutに処理を委譲
                 
             } else if (gameActive) {
                 // ゲーム中はボタンコンテナを非表示
@@ -1039,7 +1240,7 @@
             }
             
             // ★★★ NEW: 石を置いた効果音を鳴らす ★★★
-            playSE(PIECE_PUT_SE_URL, PIECE_PUT_SE_VOLUME);
+            playSE(PIECE_PUT_SE_URL, PIECE_PUT_SE_VOLUME_DEFAULT);
             // ------------------------------------
             
             board[r][c] = player;
@@ -1202,7 +1403,7 @@
             }
         }
         
-        // --- AIロジック (省略しない) ---
+        // --- AIロジック (省略) ---
 
         function checkWin(r, c, player) {
             return findWinningLine(r, c, player) !== null;
@@ -1627,7 +1828,7 @@
                     document.removeEventListener('touchend', unlockAudio, true);
                     
                     // ★★★ NEW: AudioContextがアンロックされたらBGMの再生も試みる ★★★
-                    if (gameBGM && gameBGM.paused) {
+                    if (gameBGM && gameBGM.paused && !isMuted && bgmVolume > 0) {
                          gameBGM.play().catch(e => console.warn("BGM play failed after unlock:", e.message));
                     }
                     
@@ -1651,7 +1852,7 @@
                 document.removeEventListener('touchend', unlockAudio, true);
                 
                 // ★★★ NEW: 従来のAudio要素でのアンロック時もBGMの再生を試みる ★★★
-                if (gameBGM && gameBGM.paused) {
+                if (gameBGM && gameBGM.paused && !isMuted && bgmVolume > 0) {
                     gameBGM.play().catch(e => console.warn("BGM play failed after silent unlock:", e.message));
                 }
                 
@@ -1689,7 +1890,6 @@
          class="transition-transform duration-150 ease-in-out transform hover:scale-105 active:scale-95 cursor-pointer" 
          style="width: 45vw; max-width: 300px;" />
 </div>
-    </div>
 
     <div id="game-wrapper" class="w-full h-full relative flex flex-col items-center justify-start">
 
@@ -1698,7 +1898,7 @@
         <div id="game-container" class="max-w-2xl w-full flex flex-col items-center p-2 relative z-10">
             
             <div class="flex items-center justify-center space-x-2 w-full pt-1 pb-1 flex-shrink-0">
-                </div>
+            </div>
             
             <div id="character-and-message" 
                  class="relative flex justify-center px-4 flex-shrink-0"
@@ -1711,7 +1911,32 @@
                         class="h-auto rounded-lg object-contain relative z-15"
                         style="min-width: 100px;">
                 </div>
-
+                
+                <div id="audio-control-icon" style="display: none;">
+                    <div id="audio-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-gray-700">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.617a9.28 9.28 0 011.83 4.14M16.896 9.471a5.61 5.61 0 011.11 2.474M14.67 13.327a2.805 2.805 0 01.558 1.237m-2.254-7.854l-4.545 4.545-2.25-2.25-4.5 4.5" />
+                        </svg>
+                    </div>
+                    
+                    <div id="audio-settings-menu">
+                        <h4 class="text-sm font-bold text-gray-700 mb-1">音声設定</h4>
+                        
+                        <button id="mute-button" class="w-full text-white font-semibold py-1 rounded transition duration-150 text-sm bg-blue-500">
+                            ミュート
+                        </button>
+                        
+                        <div class="flex flex-col">
+                            <label for="bgm-volume-slider" class="text-xs font-semibold text-gray-600">BGM 音量</label>
+                            <input type="range" id="bgm-volume-slider" min="0" max="100" value="20" class="w-full">
+                        </div>
+                        
+                        <div class="flex flex-col">
+                            <label for="se-voice-volume-slider" class="text-xs font-semibold text-gray-600">効果音・音声 音量</label>
+                            <input type="range" id="se-voice-volume-slider" min="0" max="100" value="80" class="w-full">
+                        </div>
+                    </div>
+                </div>
                 <div id="speech-bubble" 
                      class="absolute z-20 md:w-80 w-[90%] p-3 rounded-xl shadow-2xl transition-colors duration-300
                      bg-blue-500 text-white shadow-blue-500/80
