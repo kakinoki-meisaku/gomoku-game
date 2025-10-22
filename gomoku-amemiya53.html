@@ -374,13 +374,20 @@
             
             #speech-bubble {
                 position: absolute !important; 
-                width: 70% !important;
+                width: 80% !important;
                 transform: translateX(-50%) !important; 
                 margin-top: 0;
                 margin-bottom: 0;
                 left: 50% !important; 
                 bottom: 2px !important; 
             }
+            
+            /* NEW: テルシーのモバイル版調整 (小さく、位置を低く) */
+            #terushi {
+                width: 60px !important;  /* サイズを小さくする (元の100pxから60pxへ) */
+                bottom: 120px !important;  /* 位置を低くする (元の180pxから80pxへ) */
+            }
+            
             
             #audio-control-icon {
                 top: 10px;  /* 修正: PC版(10px)から下に移動（値は適宜調整してください） */
