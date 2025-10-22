@@ -1504,7 +1504,7 @@
             // ★★★ 修正: ゲーム終了時にBGMを停止 ★★★
             stopBGM(); 
             if (thinkingIndicator) thinkingIndicator.textContent = ""; 
-            updateStatus(`【時間切れ】10秒以内に石を置けませんでした。${AI_NAME}（白）の勝ちです！`, 'loss'); 
+            updateStatus(`【時間切れ】10秒以内に石を置けませんでした。${AI_NAME}の勝ちです！`, 'loss'); 
             
             // 💡 追加: 時間切れのランダム音声再生
             playVoice(TIMEOUT_VOICES); 
@@ -1570,7 +1570,7 @@
                 stopRain(); 
                 // ★★★ 修正: ゲーム終了時にBGMを停止 ★★★
                 stopBGM(); 
-                const winnerText = player === PLAYER_HUMAN ? `あなた（黒）` : `${AI_NAME}（白）`; 
+                const winnerText = player === PLAYER_HUMAN ? `あなた` : `${AI_NAME}`; 
                 const statusType = player === PLAYER_HUMAN ? 'win' : 'loss';
                 updateStatus(`【勝利】${winnerText}の勝ちです！`, statusType);
                 
@@ -1721,7 +1721,6 @@
             }
         }
         
-        // --- AIロジック (省略) ---
 
         function checkWin(r, c, player) {
             return findWinningLine(r, c, player) !== null;
