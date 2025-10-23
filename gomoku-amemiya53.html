@@ -1572,7 +1572,7 @@
                 stopBGM(); 
                 const winnerText = player === PLAYER_HUMAN ? `あなた` : `${AI_NAME}`; 
                 const statusType = player === PLAYER_HUMAN ? 'win' : 'loss';
-                updateStatus(`【勝利】${winnerText}の勝ちです！`, statusType);
+                updateStatus(`${winnerText}の勝ちです！`, statusType);
                 
                 // 💡 追加: 勝利者に応じた音声再生
                 if (player === PLAYER_AI) {
