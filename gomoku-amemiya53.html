@@ -1097,7 +1097,7 @@
             if (!resetButtonContainerElement) return; // コンテナ要素がなければ何もしない
 
             // 疲労モード判定: moveCount が FATIGUE_THRESHOLD 以上か
-            const isFatigueWin = moveCount >= FATIGUE_THRESHOLD;
+            const isFatigueWin = moveCount > FATIGUE_THRESHOLD;
             const imageUrl = isFatigueWin ? GOHOUBI_B_URL : GOHOUBI_A_URL;
             const altText = isFatigueWin ? "疲労モード時のごほうび画像" : "通常時のごほうび画像";
 
