@@ -22,7 +22,7 @@
             margin: 0;
             overflow: hidden;
             /* --- ゲーム画面の背景を background_white.png に変更 --- */
-            background-image: url('assets/images/background_white.png');
+            background-image: url('images/background_white.png');
             background-size: cover; /* スタート画面と同じ表示方法 */
             background-repeat: no-repeat;
             background-position: center;
@@ -111,7 +111,7 @@
             min-height: 100vh; /* 画面高さより小さくならないように保証 */
             
             /* 背景画像の設定 */
-            background-image: url('assets/images/background.png');
+            background-image: url('images/background.png');
             
             /* --- 💡 修正: モバイル版（縦長）のデフォルト設定 --- */
             /* 画面を覆い尽くし、横に隙間ができないようにする (上下は切れてもOK) */
@@ -482,11 +482,11 @@
         const FATIGUE_ERROR_CHANCE = 0.50; // 50%の確率で最善手以外の手を打つ 
 
         // --- 勝利時画像URL定義 ---
-        const GOHOUBI_A_URL = "assets/images/gohoubi_A.png"; // 疲労モード前
-        const GOHOUBI_B_URL = "assets/images/gohoubi_B.png"; // 疲労モード中
+        const GOHOUBI_A_URL = "images/gohoubi_A.png"; // 疲労モード前
+        const GOHOUBI_B_URL = "images/gohoubi_B.png"; // 疲労モード中
 
         // --- 音声関連の定数とグローバル変数 ---
-        const VOICE_BASE_URL = "assets/voice/";
+        const VOICE_BASE_URL = "voice/";
         
         // // --- ごほうび音声ファイルの定義 ---
         const GOHOUBI_A_FILENAME = 'gohoubi-a.mp3';
@@ -494,25 +494,25 @@
         
         
         // BGMのURLと音量
-        const BGM_URL = "assets/audio/bgm_game.mp3";
+        const BGM_URL = "audio/bgm_game.mp3";
         const BGM_VOLUME_DEFAULT = 0.20; // 20%の音量
         let gameBGM = null; // BGM用のAudioオブジェクト
 
         // 石を置く効果音の設定 
-        const PIECE_PUT_SE_URL = "assets/audio/SE_pieces_on.mp3";
+        const PIECE_PUT_SE_URL = "audio/SE_pieces_on.mp3";
         const PIECE_PUT_SE_VOLUME_DEFAULT = 0.50; // 50%の音量
         
         // クリティカル効果音の設定
-        const CRITICAL_SE_URL = "assets/audio/SE_critical.mp3";
+        const CRITICAL_SE_URL = "audio/SE_critical.mp3";
         const CRITICALE_VOLUME_DEFAULT = 0.50; // 50%の音量
         
         // テルシー用効果音の設定を追加 ---
-        const TERU_OK_SE_URL = "assets/audio/SE_teru_ok.mp3";
-        const TERU_NG_SE_URL = "assets/audio/SE_teru_ng.mp3";
+        const TERU_OK_SE_URL = "audio/SE_teru_ok.mp3";
+        const TERU_NG_SE_URL = "audio/SE_teru_ng.mp3";
         const TERU_SE_VOLUME_DEFAULT = 0.50; // テルシーの音量
         
         // スタート/リセットボタンの効果音の設定を追加
-        const PIKON_SE_URL = "assets/audio/SE_pikon.mp3";
+        const PIKON_SE_URL = "audio/SE_pikon.mp3";
         const PIKON_SE_VOLUME_DEFAULT = 0.50; // 50%の音量
         // ------------------------------------
 
@@ -604,7 +604,7 @@
         
         // AIの評価値
         const SCORE_WEIGHTS = { 0: 0, 1: 1, 2: 10, 3: 10000, 4: 1000000, 5: 10000000 };
-        const IMAGE_BASE_URL = "assets/images/amemiya_";
+        const IMAGE_BASE_URL = "images/amemiya_";
         
         // --- NEW: アメミヤチカのピンチ画像URL定義の追加 ---
         const PINCH_01_URL = IMAGE_BASE_URL + "pinch01.png"; // 活四よる勝確時
@@ -612,8 +612,8 @@
         // ------------------------------------
         
         // --- 修正: 石の画像URL定義 ---
-        const BLACK_STONE_URL = "assets/images/kuroishi.png";
-        const WHITE_STONE_URL = "assets/images/shiroishi.png";
+        const BLACK_STONE_URL = "images/kuroishi.png";
+        const WHITE_STONE_URL = "images/shiroishi.png";
         
         // 相手の勝利阻止（即座の5連ブロック）のスコア
         const BLOCK_BONUS = 15000000; 
@@ -646,6 +646,7 @@
         };
 
         let aiGuaranteedWin = false;
+        let isPlayerGuaranteedWin = false;
         let isPinchThinking = false; 
         let board = [];
         let currentPlayer = PLAYER_HUMAN;
@@ -670,6 +671,7 @@
         // --- 修正: モーダル要素からボタンコンテナ要素へ ---
         let resetButtonContainerElement; 
         let modalResetButton; 
+        let pinchOverlayImageElement;
         
         // ★★★ NEW: スタート画面関連の要素 ★★★
         let startScreenElement;
@@ -697,7 +699,7 @@
         const DROP_SPEED_MAX = 12;
         
         // GitHubのLICENSE.md の Raw URL
-        const LICENSE_URL = "LICENSE.md";
+        const LICENSE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/LICENSE.md";
         
         /**
          * 外部の LICENSE.md ファイルを非同期で取得し、モーダルに表示する
@@ -812,7 +814,7 @@
             // muteButtonに関する処理を削除
         
             if (icon) {
-                const imageUrl = 'assets/images/onpu.png';
+                const imageUrl = 'images/onpu.png';
                 // スピーカーアイコンの SVG を、指定された音符画像に置き換えます。
                 icon.innerHTML = `<img src="${imageUrl}" alt="音量調整" style="display: block; width: 24px; height: 24px;"/>`;
             }
@@ -827,7 +829,7 @@
             const linkIcon = document.getElementById('link-icon'); 
             
             if (linkIcon) { 
-                const imageUrl = 'assets/images/move.png';
+                const imageUrl = 'images/move.png';
                 // リンクアイコンの SVG を、指定された画像に置き換えます。
                 linkIcon.innerHTML = `<img src="${imageUrl}" alt="youtubeにアクセス" style="display: block; width: 24px; height: 24px;"/>`;
             }
@@ -1045,6 +1047,38 @@
                 updateAudioSettingsUI();
             }
         }
+        
+        /**
+         * プレイヤー（黒）の確定リーチ状態に応じてオーバーレイ画像を更新する。
+         */
+        function updatePinchOverlay() {
+        
+            const pinchOverlayImageElement = document.getElementById('pinch-overlay-image');
+            const charImageElement = document.getElementById('char-image');
+            
+            // 要素が存在しない場合は処理を終了
+            if (!pinchOverlayImageElement || !charImageElement) return;
+            
+            if (!charImageElement) return;
+        
+            if (isPlayerGuaranteedWin) {
+                // フラグがオンなら表示
+                
+                // char-imageを非表示にする
+                charImageElement.style.visibility = 'hidden'; //;
+
+                // pinchOverlayImageElementを表示にする
+                pinchOverlayImageElement.style.display = 'block';
+                pinchOverlayImageElement.src = PINCH_01_URL; 
+            } else {
+                // フラグがオフなら非表示
+                // char-imageを表示に戻す
+                charImageElement.style.visibility = 'visible';
+        
+                // pinchOverlayImageElementを非表示にする
+                pinchOverlayImageElement.style.display = 'none';
+            }
+        }
 
 
         /**
@@ -1067,6 +1101,7 @@
             timerElement = document.getElementById('timer');
             thinkingIndicator = document.getElementById('thinking-indicator'); 
             charImageElement = document.getElementById('char-image'); 
+            pinchOverlayImageElement = document.getElementById('pinch-overlay-image');
             boardElement = document.getElementById('board');
             rainCanvas = document.getElementById('rainCanvas');
             rainCtx = rainCanvas.getContext('2d');
@@ -1498,6 +1533,58 @@
         }
         
         
+        function checkBoardForLiveFour(player) {
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] === 0) { // 空きマスのみをチェック
+                        
+                        // 1. そのマスに石を仮置きしてみる
+                        board[r][c] = player; 
+                        
+                        // 2. 厳密な checkWin（5連判定）で勝利するか判定
+                        if (checkWin(r, c, player)) {
+                            
+                            // 3. 盤面を元に戻す
+                            board[r][c] = 0; 
+                            return true; // 勝利確定の手が存在する
+                        }
+                        
+                        // 3. 盤面を元に戻す
+                        board[r][c] = 0; 
+                    }
+                }
+            }
+            return false;
+        }
+        
+        function checkBoardForLiveFour_StrictLiveFour(player) {
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1]
+            ];
+        
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] === 0) {
+                        
+                        board[r][c] = player; 
+                        
+                        for (const [dr, dc] of directions) {
+                            const result = countConsecutive(r, c, dr, dc, player);
+                            
+                            // 厳密な両活四の条件: 5連になる && 両端が空いている (openEnds >= 2)
+                            if (result.count >= 5 && result.openEnds >= 2) {
+                                board[r][c] = 0;
+                                return true; 
+                            }
+                        }
+                        
+                        board[r][c] = 0; 
+                    }
+                }
+            }
+            return false;
+        }
+        
         function initializeBoardUI() {
             if (!boardElement) return;
             boardElement.innerHTML = '';
@@ -1693,6 +1780,8 @@
 
         function handleTimeOut() {
             gameActive = false;
+            isPlayerGuaranteedWin = false;
+            updatePinchOverlay();
             clearInterval(timerInterval); // ★修正: 時間切れなのでタイマーも停止
             stopRain();
             // ★★★ 修正: ゲーム終了時にBGMを停止 ★★★
@@ -1761,6 +1850,8 @@
 
             if (checkWin(r, c, player)) {
                 gameActive = false;
+                isPlayerGuaranteedWin = false;
+                updatePinchOverlay();
                 stopRain(); 
                 // ★★★ 修正: ゲーム終了時にBGMを停止 ★★★
                 stopBGM(); 
@@ -1785,6 +1876,8 @@
 
             } else if (isDraw()) {
                 gameActive = false;
+                isPlayerGuaranteedWin = false;
+                updatePinchOverlay();
                 stopRain(); 
                 // ★★★ 修正: ゲーム終了時にBGMを停止 ★★★
                 stopBGM(); 
@@ -1917,7 +2010,24 @@
         
 
         function checkWin(r, c, player) {
-            return findWinningLine(r, c, player) !== null;
+            // 勝利判定に必要な4方向を定義
+            const directions = [
+                [0, 1],   // 水平
+                [1, 0],   // 垂直
+                [1, 1],   // 右下がり斜め
+                [1, -1]   // 左下がり斜め
+            ];
+        
+            for (const [dr, dc] of directions) {
+                // countConsecutive を呼び出し、着手点 (r, c) を含む合計の並びの数を取得
+                const result = countConsecutive(r, c, dr, dc, player);
+                
+                // ★★★ 厳密に 5つ以上並んでいるかを確認 ★★★
+                if (result.count >= 5) { 
+                    return true; // 5連以上で勝利
+                }
+            }
+            return false; // 勝利なし
         }
 
         function countConsecutive(r, c, dr, dc, player) {
@@ -2228,15 +2338,47 @@
         }
 
         async function aiTurn() { 
+            
+            // ★★★ NEW: プレイヤー側の確定リーチ（活四）を判定し、フラグを更新するロジック ★★★
+    
+            // 1. 盤面全体をスキャンし、勝利確定の手が存在するかチェック
+            const isCurrentlyWinThreat = checkBoardForLiveFour(PLAYER_HUMAN); // 単四も true になる
+            
+            // 2. 【新規判定】厳密な両活四（両端空き4連）が盤面に存在するかチェック
+            //    ※ checkBoardForLiveFour(player) のロジックを openEnds >= 2 で書き換えた関数を別途定義してください
+            const isCurrentlyLiveFour = checkBoardForLiveFour_StrictLiveFour(PLAYER_HUMAN); // 両活四のみ true になる
+
+            // ★★★ 修正ロジック: ピンチ状態のフラグ設定 ★★★
+            // 「現在、両活四が存在する場合」 OR 「AIがブロックしきれなかった場合」に true を維持する
+            if (isCurrentlyLiveFour) {
+                // 厳密な活四（両活四）が存在すれば、確定リーチ
+                isPlayerGuaranteedWin = true;
+            } else if (isPlayerGuaranteedWin && isCurrentlyWinThreat) {
+                // 以前確定リーチで、かつブロックしても単四（次の手で勝ち）が残っている場合は維持（単四を活四と見なす）
+                // ※ ここを true にすると単四でもピンチ画像が表示される原因になるため、
+                // 厳密に両活四のみをピンチ対象としたい場合はこの 'else if' は削除します。
+                
+                // ➡ 要望を満たすため、単四はピンチに含めず、両活四（真の活四）のみを対象とします。
+                
+                // 活四が完全に解消された場合は false
+                isPlayerGuaranteedWin = false; 
+            } else {
+                isPlayerGuaranteedWin = false;
+            }
+            
+            // オーバーレイ画像を更新
+            updatePinchOverlay();
+            
             if (!gameActive) { if (thinkingIndicator) thinkingIndicator.textContent = ""; return; } 
 
             if (thinkingIndicator) thinkingIndicator.textContent = "思考中..."; 
+            
+            //isPinchThinking = isPlayerGuaranteedWin;
             
             // 疲労モードかどうかに関わらず、思考中は 'thinking' にする
-			// isPinchThinkingがtrueの場合は、thinking顔への切り替えをスキップする
-            if (!isPinchThinking) { 
-                setCharacterMood('thinking', 'thinking'); // moodTypeを渡すように変更
-            }
+            if (!isPinchThinking && !isPlayerGuaranteedWin) { // ★ 修正点2: 確定リーチフラグもチェックに追加 ★
+                 setCharacterMood('thinking', 'thinking'); // moodTypeを渡すように変更
+            }
 
             await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500)); 
             
@@ -2324,17 +2466,27 @@
 
             if (thinkingIndicator) thinkingIndicator.textContent = ""; 
             
-            if (threatType === 'win_confirmed') {
+            if (threatType === 'win_confirmed') {
                 const winMsg = getRandomMessage('WIN_CONFIRMED');
-                updateStatus(winMsg, 'win_confirmed'); 
-                // 💡 追加: 勝確メッセージに対応する音声再生
-                playVoice(MESSAGE_VOICE_MAP[winMsg], 1.0); 
+                
+                // ★★★ 修正: 黒が確定リーチでない場合のみ、メッセージと音声を再生 ★★★
+                if (!isPlayerGuaranteedWin) {
+                    updateStatus(winMsg, 'win_confirmed'); 
+                    playVoice(MESSAGE_VOICE_MAP[winMsg], 1.0); 
+                }
+                // ★★★ ------------------------------------------------------------- ★★★
+                
                 await new Promise(resolve => setTimeout(resolve, 800)); 
             } else if (threatType === 'reach') { 
                 const reachMsg = getRandomMessage('REACH');
-                updateStatus(reachMsg, 'reach'); 
-                 // 💡 追加: リーチメッセージに対応する音声再生
-                playVoice(MESSAGE_VOICE_MAP[reachMsg], 1.0); 
+                
+                // ★★★ 修正: 黒が確定リーチでない場合のみ、メッセージと音声を再生 ★★★
+                if (!isPlayerGuaranteedWin) {
+                    updateStatus(reachMsg, 'reach'); 
+                    playVoice(MESSAGE_VOICE_MAP[reachMsg], 1.0); 
+                }
+                // ★★★ ------------------------------------------------------------- ★★★
+                
                 await new Promise(resolve => setTimeout(resolve, 800)); 
             }
             
@@ -2342,7 +2494,7 @@
 
             // ★ 修正2: 脅威ボイスがない AND 次のターンで疲労ボイスがない場合にのみ、ランダム音声再生 ★
             // threatTypeがない かつ、次のターンで「疲労ボイスが再生される予定がない」場合にのみ、AIのランダムな「石を置く音」を再生します。
-            if (threatType === null && !willAnnounceFatigueNextTurn) { 
+            if (threatType === null && !willAnnounceFatigueNextTurn && !isFinalMoveImmediateWin) { 
                 // 💡 元のロジック: AIが石を置く直前に、30%の確率でランダム音声再生
                 playVoice(PUT_VOICES, VOICE_CHANCE_PUT);
             }
@@ -2350,6 +2502,17 @@
             await placePiece(finalMove.move.r, finalMove.move.c, PLAYER_AI, threatType); // ★修正：座標アクセス
 
             if (gameActive) {
+                
+                // ★★★ NEW/FIX: AI着手後のピンチ状態の再チェックとリセット ★★★
+                if (checkBoardForLiveFour(PLAYER_HUMAN)) {
+                    // AIが打った後も活四が継続している場合（AIのミス、またはプレイヤーが同時に複数活四を作っていた）
+                    isPlayerGuaranteedWin = true;
+                } else {
+                    // AIが活四を正しくブロックした場合、ピンチ解除
+                    isPlayerGuaranteedWin = false;
+                }
+                updatePinchOverlay(); // 画像を更新
+
                 // placePieceでmoveCountが増えている
                 const isCurrentFatigued = (moveCount) >= FATIGUE_THRESHOLD; 
                 
@@ -2363,12 +2526,12 @@
 
                 if (!threatType) {
                     // ★修正: プレイヤーが勝ち確定（WIN_CONFIRMED）の状態でない場合にのみ、表情を戻す
-                    if (humanThreatAfterAITurn !== 'WIN_CONFIRMED') {
+                    if (!isPlayerGuaranteedWin) {
                         // 脅威がない場合のみ、表情を戻す
                         if (isCurrentFatigued) {
                             // 疲労モードであれば tired に戻す
                             setCharacterMood('tired', 'tired'); // moodTypeを渡すように変更
-                        } else {
+                        } else {
                             // 非疲労モードであれば smile にする
                             setCharacterMood('smile', 'smile'); // moodTypeを渡すように変更
                         }
@@ -2377,10 +2540,7 @@
                         // プレイヤーが勝ち確定の状態なら、ピンチ顔を維持するために待機のみ行う
                         await new Promise(resolve => setTimeout(resolve, 3000)); 
                     }
-                } else {
-                    // 脅威がある場合は、表情をリセットしない。(このロジックはそのまま維持)
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
+                }
             }
         }
         
@@ -2451,9 +2611,9 @@
     </script>
     <body class="bg-gray-100 h-screen flex flex-col items-center justify-start py-2 px-2 font-sans overflow-hidden">
     <div id="start-screen" style="display: flex;">
-    <img alt="タイトル" class="mb-8" id="title-image" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/title.png" style="width: 70vw; max-width: 512px;"/>
-    <img alt="説明テキスト" class="mb-12 pointer-events-none" id="text-image" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/text.png" style="width: 70vw; max-width: 400px;"/>
-    <img alt="スタートボタン" class="transition-transform duration-150 ease-in-out transform hover:scale-105 active:scale-95 cursor-pointer" id="start-button" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/start.png" style="width: 45vw; max-width: 300px;"/>
+    <img alt="タイトル" class="mb-8" id="title-image" src="images/title.png" style="width: 70vw; max-width: 512px;"/>
+    <img alt="説明テキスト" class="mb-12 pointer-events-none" id="text-image" src="images/text.png" style="width: 70vw; max-width: 400px;"/>
+    <img alt="スタートボタン" class="transition-transform duration-150 ease-in-out transform hover:scale-105 active:scale-95 cursor-pointer" id="start-button" src="images/start.png" style="width: 45vw; max-width: 300px;"/>
     <div id="copyright-info" class="text-xs mt-8 mb-4 text-white bg-black bg-opacity-60 px-2 py-1 rounded">
     © 2025 カキノキ|
     <a href="#" id="open-license-modal" class="hover:underline text-white">利用規約</a>|
@@ -2470,8 +2630,22 @@
     </div>
     <div class="relative flex justify-center px-4 flex-shrink-0" id="character-and-message" style="max-width: min(90vw, 450px); width: 100%; margin: 0 auto; height: 400px; align-items: flex-end; padding-bottom: 0;">
     <div class="relative" id="char-image-container">
-    <img alt="AIキャラクター アメミヤチカ" class="h-auto rounded-lg object-contain relative z-15" id="char-image" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amemiya_normal.png" style="min-width: 100px;"/>
-    <img alt="てるしー" id="terushi" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/teru.png" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:200px;z-index:25;display:none;cursor:pointer;animation:float 3s ease-in-out infinite;"/></div>
+    <img alt="AIキャラクター アメミヤチカ" class="h-auto rounded-lg object-contain relative z-15" id="char-image" src="images/amemiya_normal.png" style="min-width: 100px;"/>
+    <img id="pinch-overlay-image" 
+        src="images/amemiya_pinch01.png" 
+        alt="ピンチ表情オーバーレイ" 
+        style="
+            display: none; 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain; 
+            /* 既存のchar-image(z-index: 15)の上に重ねる */
+            z-index: 20;
+        "/>
+    <img alt="てるしー" id="terushi" src="images/teru.png" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:200px;z-index:25;display:none;cursor:pointer;animation:float 3s ease-in-out infinite;"/></div>
     
     <div id="right-icons-container">
         <div id="audio-control-icon" style="display: none;">
@@ -2506,7 +2680,7 @@
 </div>
 <div id="reset-button-container" class="transition duration-150 ease-in-out transform" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 60; cursor: pointer;">
     <img id="modal-reset-button"
-         src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amagumo.png"
+         src="images/amagumo.png"
          alt="もう一回"
          class="w-[100px] mx-auto hover:scale-105 active:scale-95 transition duration-150 ease-in-out" />
 </div>
@@ -2566,6 +2740,8 @@ if (originalPlacePiece) {
     // テルシー無視
     if (player === PLAYER_HUMAN && terushiVisible) {
       gameActive = false;
+      isPlayerGuaranteedWin = false;
+      updatePinchOverlay();
       updateStatus('【敗北】てるしーを無視してしまいました…', 'loss');
       // BGMを停止する処理を追加 (★ここを追加)
       stopBGM();
@@ -2641,6 +2817,11 @@ if (originalInitializeGame) {
         if (typeof isPinchThinking !== 'undefined') {
             isPinchThinking = false;
         }
+    // ★★★ NEW: プレイヤー確定リーチフラグのリセットとオーバーレイ非表示 ★★★
+    if (typeof isPlayerGuaranteedWin !== 'undefined') {
+        isPlayerGuaranteedWin = false;
+    }
+    updatePinchOverlay(); // 非表示を確定させる
 
     if (terushiElement) {
       terushiVisible = false;
