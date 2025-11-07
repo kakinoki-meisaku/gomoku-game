@@ -367,7 +367,41 @@
             50% { transform: translateY(-6px);}
             100% { transform: translateY(0); }
           }
+          
+          /* テルシー無視時の存在アピールアニメーション (浮遊 + 拡大/縮小) */
+          @keyframes terushi-loss-assert {
+              /* 0% (3.0s) の位置: 浮遊0px, スケール1.0 */
+              0% { transform: translateY(0) scale(1.0); } 
+              
+              /* 浮遊がほとんどない位置でアピール開始 (0.25s) */
+              8.33% { transform: translateY(-0.5px) scale(1.15); } 
+              16.66% { transform: translateY(-1px) scale(1.0); }
+              
+              /* 浮遊中間位置でアピール (0.75s) */
+              25% { transform: translateY(-3px) scale(1.15); }
+              33.33% { transform: translateY(-4px) scale(1.0); }
+              41.66% { transform: translateY(-5px) scale(1.15); }
+              
+              /* 浮遊最上位でアピール (1.5s) */
+              50% { transform: translateY(-6px) scale(1.0); } 
+              
+              /* 浮遊が戻る途中でアピール (1.75s, 2.0s) */
+              58.33% { transform: translateY(-5.5px) scale(1.15); } 
+              66.66% { transform: translateY(-5px) scale(1.0); }
+              
+              /* 浮遊中間位置でアピール (2.25s) */
+              75% { transform: translateY(-3px) scale(1.15); }
+              83.33% { transform: translateY(-2px) scale(1.0); }
+              91.66% { transform: translateY(-1px) scale(1.15); }
+              
+              /* 100% (3.0s) の位置に戻る */
+              100% { transform: translateY(0) scale(1.0); } 
+          }
 
+          /* テルシー無視時に適用するクラス: 既存の animation を上書きして、統合したアニメーションを適用 */
+          .terushi-loss-assert-active {
+              animation: terushi-loss-assert 3s ease-in-out infinite !important;
+          }
 
 
         /* --- モバイルでのレイアウト調整 --- */
@@ -2743,10 +2777,19 @@ if (originalPlacePiece) {
       isPlayerGuaranteedWin = false;
       updatePinchOverlay();
       updateStatus('【敗北】てるしーを無視してしまいました…', 'loss');
-      // BGMを停止する処理を追加 (★ここを追加)
+      // BGMを停止する処理を追加
       stopBGM();
       playSE(TERU_NG_SE_URL, TERU_SE_VOLUME_DEFAULT);
       playVoice(TETU_NG_VOICES, 1.0); // 100%の確率でランダム再生
+            
+      // テルシー存在アピールアニメーションを追加
+          const terushi = document.getElementById('terushi');
+          if (terushi) {
+              // 新しいクラスを追加して、アニメーションをトリガーする
+              terushi.classList.add('terushi-loss-assert-active');
+          }
+      // テルシー存在アピールアニメーションを追加 (ここまで) 
+      
       // てるしーは表示されたまま
       setTimeout(showResetButton, 2000);
       return;
@@ -2817,7 +2860,7 @@ if (originalInitializeGame) {
         if (typeof isPinchThinking !== 'undefined') {
             isPinchThinking = false;
         }
-    // ★★★ NEW: プレイヤー確定リーチフラグのリセットとオーバーレイ非表示 ★★★
+    // プレイヤー確定リーチフラグのリセットとオーバーレイ非表示
     if (typeof isPlayerGuaranteedWin !== 'undefined') {
         isPlayerGuaranteedWin = false;
     }
@@ -2826,6 +2869,7 @@ if (originalInitializeGame) {
     if (terushiElement) {
       terushiVisible = false;
       terushiElement.style.display = 'none';
+      terushiElement.classList.remove('terushi-loss-assert-active');
     }
     return originalInitializeGame.call(this);
   };
