@@ -37,10 +37,6 @@ function preloadVoicesAndUnlock() {
         const audio = new Audio(url);
         audio.load(); // プリロードを促す
         preloadedTimeoutVoices.push(audio);
-        
-        // モバイルで強制的にアンロックするため、音量を0にして一度再生を試みる
-        audio.volume = 0;
-        audio.play().catch(e => {
             // 自動再生ブロックエラーは無視
         });
     });
