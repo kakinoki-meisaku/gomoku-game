@@ -37,6 +37,7 @@ function preloadVoicesAndUnlock() {
         const audio = new Audio(url);
         audio.load(); // プリロードを促す
         preloadedTimeoutVoices.push(audio);
+        
             // 自動再生ブロックエラーは無視
         });
     });
@@ -991,18 +992,53 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             }
             
             if (fileNames === TIMEOUT_VOICES && preloadedTimeoutVoices.length > 0) {
-                const randomIndex = Math.floor(Math.random() * preloadedTimeoutVoices.length);
-                const voice = preloadedTimeoutVoices[randomIndex];
-                
-                // 既に再生済みでも頭から再生できるように現在位置をリセット
-                voice.currentTime = 0; 
-                voice.volume = seVoiceVolume; // グローバル設定された音量を適用
-                
-                voice.play().catch(e => {
-                     console.error('プリロード済みボイスの再生に失敗しました:', e);
-                });
-                return true; 
-            }
+                    const randomIndex = Math.floor(Math.random() * preloadedTimeoutVoices.length);
+                    const voice = preloadedTimeoutVoices[randomIndex];
+                    
+                    voice.currentTime = 0; 
+                    voice.volume = seVoiceVolume;
+                    
+                    voice.play().catch(e => {
+                        // ここが実行されるのは、非同期再生がモバイルブラウザにブロックされた時
+                        console.warn('非同期再生がブロックされました。Web Audio APIで再試行します。', e);
+                        
+                        // --- 🚨 最終手段のロジック：Web Audio APIでの再試行 ---
+                        // プリロードされた音声ファイル名を取得
+                        const fileNameToPlay = TIMEOUT_VOICES[randomIndex];
+                        const url = VOICE_BASE_URL + fileNameToPlay;
+            
+                        // Web Audio APIでファイルをフェッチし、再生を試みる
+                        // ただし、これもアンロックされていないとブロックされる可能性あり
+                        if (window.AudioContext || window.webkitAudioContext) {
+                            fetch(url)
+                                .then(response => response.arrayBuffer())
+                                .then(arrayBuffer => {
+                                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                                    const context = new AudioContext();
+                                    context.decodeAudioData(arrayBuffer, buffer => {
+                                        const source = context.createBufferSource();
+                                        source.buffer = buffer;
+                                        source.connect(context.destination);
+                                        
+                                        // 音量を設定
+                                        const gainNode = context.createGain();
+                                        gainNode.gain.value = seVoiceVolume;
+                                        source.connect(gainNode);
+                                        gainNode.connect(context.destination);
+            
+                                        source.start(0);
+                                        console.log('Web Audio API で音声再生を試行しました。');
+                                    }).catch(decodeErr => {
+                                        console.error('AudioContext デコードエラー:', decodeErr);
+                                    });
+                                }).catch(fetchErr => {
+                                    console.error('音声ファイルのフェッチエラー:', fetchErr);
+                                });
+                        }
+                        // --- 最終手段ロジック終了 ---
+                    });
+                    return true; 
+                }
             
             let fileName = Array.isArray(fileNames) 
                            ? fileNames[Math.floor(Math.random() * fileNames.length)] 
