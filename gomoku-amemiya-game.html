@@ -14,72 +14,6 @@
 
   gtag('config', 'G-ENES4Q9772');
 </script>
-
-<script>
-// --- モバイル音声アンロックとタイムアウトボイスのプリロード ---
-
-// TIMEOUT_VOICES（配列）はグローバルに定義されていることを前提とします。
-const preloadedTimeoutVoices = [];
-let audioUnlocked = false;
-
-// タイムアウトボイスをプリロードし、一度再生を試みてロック解除を確定させる関数
-function preloadVoicesAndUnlock() {
-    if (preloadedTimeoutVoices.length > 0) return; // 既にロード済みならスキップ
-
-    if (typeof TIMEOUT_VOICES === 'undefined' || TIMEOUT_VOICES.length === 0) {
-        console.warn('TIMEOUT_VOICESが定義されていないか空です。');
-        return;
-    }
-    
-    // TIMEOUT_VOICES内のすべての音声をAudioオブジェクトとしてロード
-    TIMEOUT_VOICES.forEach((fileName) => {
-        const url = VOICE_BASE_URL + fileName; // VOICE_BASE_URLもグローバルにあることを前提
-        const audio = new Audio(url);
-        audio.load(); // プリロードを促す
-        preloadedTimeoutVoices.push(audio);
-        
-        // モバイルで強制的にアンロックするため、音量を0にして一度再生を試みる
-        audio.volume = 0;
-        audio.play().catch(e => {
-            // 自動再生ブロックエラーは無視
-        });
-    });
-
-    audioUnlocked = true;
-    // アンロックが成功したら、イベントリスナーを解除
-    document.removeEventListener('touchstart', handleInitialInteraction, true);
-    document.removeEventListener('mousedown', handleInitialInteraction, true);
-}
-
-
-// 最初のユーザー操作（タッチまたはクリック）を捕捉し、アンロック処理を起動する関数
-function handleInitialInteraction() {
-    if (audioUnlocked) return;
-    
-    // Web Audio APIのコンテキスト再開を試みる（あれば）
-    if (window.AudioContext || window.webkitAudioContext) {
-        try {
-            const context = new (window.AudioContext || window.webkitAudioContext)();
-            if (context.state === 'suspended') {
-                context.resume().then(preloadVoicesAndUnlock).catch(e => console.error('Context resume failed:', e));
-            } else {
-                preloadVoicesAndUnlock();
-            }
-        } catch (e) {
-            preloadVoicesAndUnlock(); // エラー時は直接HTML Audioを試す
-        }
-    } else {
-        preloadVoicesAndUnlock();
-    }
-}
-
-// document全体で最初のタッチまたはクリックイベントを捕捉（他の要素より先に処理する）
-document.addEventListener('touchstart', handleInitialInteraction, true);
-document.addEventListener('mousedown', handleInitialInteraction, true);
-
-// --- モバイル音声アンロックとプリロードの終了 ---
-</script>
-
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
         /* 画面全体にキャンバスを広げ、スクロールバーを非表示にする */
@@ -88,7 +22,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             margin: 0;
             overflow: hidden;
             /* --- ゲーム画面の背景を background_white.png に変更 --- */
-            background-image: url('https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/background_white.png');
+            background-image: url('assets/images/background_white.png');
             background-size: cover; /* スタート画面と同じ表示方法 */
             background-repeat: no-repeat;
             background-position: center;
@@ -177,7 +111,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             min-height: 100vh; /* 画面高さより小さくならないように保証 */
             
             /* 背景画像の設定 */
-            background-image: url('https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/background.png');
+            background-image: url('assets/images/background.png');
             
             /* --- 💡 修正: モバイル版（縦長）のデフォルト設定 --- */
             /* 画面を覆い尽くし、横に隙間ができないようにする (上下は切れてもOK) */
@@ -419,7 +353,8 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             margin-left: auto;
             margin-right: auto;
   
-            transition: transform 3s ease-out, opacity 3s ease-out;
+            /* 以前の transform による位置調整は削除 */
+            /* transform: translateX(-50%); */
   
             width: 100px !important;
             z-index:25;
@@ -466,15 +401,6 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
           /* テルシー無視時に適用するクラス: 既存の animation を上書きして、統合したアニメーションを適用 */
           .terushi-loss-assert-active {
               animation: terushi-loss-assert 3s ease-in-out infinite !important;
-          }
-          
-          .terushi-slide-out {
-              /* 現在の位置から右に 2000px 移動させる */
-              transform: translateX(50px) scale(1.0) !important; 
-              opacity: 0 !important; /* 透明にして完全に非表示にする */
-    
-              /* 負け時のアピールアニメーションを解除するため !important を追加 */
-              animation: none !important; 
           }
 
 
@@ -590,11 +516,11 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
         const FATIGUE_ERROR_CHANCE = 0.50; // 50%の確率で最善手以外の手を打つ 
 
         // --- 勝利時画像URL定義 ---
-        const GOHOUBI_A_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/gohoubi_A.png"; // 疲労モード前
-        const GOHOUBI_B_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/gohoubi_B.png"; // 疲労モード中
+        const GOHOUBI_A_URL = "assets/images/gohoubi_A.png"; // 疲労モード前
+        const GOHOUBI_B_URL = "assets/images/gohoubi_B.png"; // 疲労モード中
 
         // --- 音声関連の定数とグローバル変数 ---
-        const VOICE_BASE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/voice/";
+        const VOICE_BASE_URL = "assets/voice/";
         
         // // --- ごほうび音声ファイルの定義 ---
         const GOHOUBI_A_FILENAME = 'gohoubi-a.mp3';
@@ -602,25 +528,25 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
         
         
         // BGMのURLと音量
-        const BGM_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/bgm_game.mp3";
+        const BGM_URL = "assets/audio/bgm_game.mp3";
         const BGM_VOLUME_DEFAULT = 0.20; // 20%の音量
         let gameBGM = null; // BGM用のAudioオブジェクト
 
         // 石を置く効果音の設定 
-        const PIECE_PUT_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_pieces_on.mp3";
+        const PIECE_PUT_SE_URL = "assets/audio/SE_pieces_on.mp3";
         const PIECE_PUT_SE_VOLUME_DEFAULT = 0.50; // 50%の音量
         
         // クリティカル効果音の設定
-        const CRITICAL_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_critical.mp3";
+        const CRITICAL_SE_URL = "assets/audio/SE_critical.mp3";
         const CRITICALE_VOLUME_DEFAULT = 0.50; // 50%の音量
         
         // テルシー用効果音の設定を追加 ---
-        const TERU_OK_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_teru_ok.mp3";
-        const TERU_NG_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_teru_ng.mp3";
+        const TERU_OK_SE_URL = "assets/audio/SE_teru_ok.mp3";
+        const TERU_NG_SE_URL = "assets/audio/SE_teru_ng.mp3";
         const TERU_SE_VOLUME_DEFAULT = 0.50; // テルシーの音量
         
         // スタート/リセットボタンの効果音の設定を追加
-        const PIKON_SE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/audio/SE_pikon.mp3";
+        const PIKON_SE_URL = "assets/audio/SE_pikon.mp3";
         const PIKON_SE_VOLUME_DEFAULT = 0.50; // 50%の音量
         // ------------------------------------
 
@@ -712,7 +638,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
         
         // AIの評価値
         const SCORE_WEIGHTS = { 0: 0, 1: 1, 2: 10, 3: 10000, 4: 1000000, 5: 10000000 };
-        const IMAGE_BASE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amemiya_";
+        const IMAGE_BASE_URL = "assets/images/amemiya_";
         
         // --- NEW: アメミヤチカのピンチ画像URL定義の追加 ---
         const PINCH_01_URL = IMAGE_BASE_URL + "pinch01.png"; // 活四よる勝確時
@@ -720,8 +646,8 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
         // ------------------------------------
         
         // --- 修正: 石の画像URL定義 ---
-        const BLACK_STONE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/kuroishi.png";
-        const WHITE_STONE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/shiroishi.png";
+        const BLACK_STONE_URL = "assets/images/kuroishi.png";
+        const WHITE_STONE_URL = "assets/images/shiroishi.png";
         
         // 相手の勝利阻止（即座の5連ブロック）のスコア
         const BLOCK_BONUS = 15000000; 
@@ -807,7 +733,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
         const DROP_SPEED_MAX = 12;
         
         // GitHubのLICENSE.md の Raw URL
-        const LICENSE_URL = "https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/LICENSE.md";
+        const LICENSE_URL = "LICENSE.md";
         
         /**
          * 外部の LICENSE.md ファイルを非同期で取得し、モーダルに表示する
@@ -922,7 +848,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             // muteButtonに関する処理を削除
         
             if (icon) {
-                const imageUrl = 'https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/onpu.png';
+                const imageUrl = 'assets/images/onpu.png';
                 // スピーカーアイコンの SVG を、指定された音符画像に置き換えます。
                 icon.innerHTML = `<img src="${imageUrl}" alt="音量調整" style="display: block; width: 24px; height: 24px;"/>`;
             }
@@ -937,7 +863,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             const linkIcon = document.getElementById('link-icon'); 
             
             if (linkIcon) { 
-                const imageUrl = 'https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/move.png';
+                const imageUrl = 'assets/images/move.png';
                 // リンクアイコンの SVG を、指定された画像に置き換えます。
                 linkIcon.innerHTML = `<img src="${imageUrl}" alt="youtubeにアクセス" style="display: block; width: 24px; height: 24px;"/>`;
             }
@@ -992,20 +918,6 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             
             if (Math.random() > probability) {
                 return false; 
-            }
-            
-            if (fileNames === TIMEOUT_VOICES && preloadedTimeoutVoices.length > 0) {
-                const randomIndex = Math.floor(Math.random() * preloadedTimeoutVoices.length);
-                const voice = preloadedTimeoutVoices[randomIndex];
-                
-                // 既に再生済みでも頭から再生できるように現在位置をリセット
-                voice.currentTime = 0; 
-                voice.volume = seVoiceVolume; // グローバル設定された音量を適用
-                
-                voice.play().catch(e => {
-                     console.error('プリロード済みボイスの再生に失敗しました:', e);
-                });
-                return true; 
             }
             
             let fileName = Array.isArray(fileNames) 
@@ -2733,9 +2645,9 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
     </script>
     <body class="bg-gray-100 h-screen flex flex-col items-center justify-start py-2 px-2 font-sans overflow-hidden">
     <div id="start-screen" style="display: flex;">
-    <img alt="タイトル" class="mb-8" id="title-image" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/title.png" style="width: 70vw; max-width: 512px;"/>
-    <img alt="説明テキスト" class="mb-12 pointer-events-none" id="text-image" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/text.png" style="width: 70vw; max-width: 400px;"/>
-    <img alt="スタートボタン" class="transition-transform duration-150 ease-in-out transform hover:scale-105 active:scale-95 cursor-pointer" id="start-button" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/start.png" style="width: 45vw; max-width: 300px;"/>
+    <img alt="タイトル" class="mb-8" id="title-image" src="assets/images/title.png" style="width: 70vw; max-width: 512px;"/>
+    <img alt="説明テキスト" class="mb-12 pointer-events-none" id="text-image" src="assets/images/text.png" style="width: 70vw; max-width: 400px;"/>
+    <img alt="スタートボタン" class="transition-transform duration-150 ease-in-out transform hover:scale-105 active:scale-95 cursor-pointer" id="start-button" src="assets/images/start.png" style="width: 45vw; max-width: 300px;"/>
     <div id="copyright-info" class="text-xs mt-8 mb-4 text-white bg-black bg-opacity-60 px-2 py-1 rounded">
     © 2025 カキノキ|
     <a href="#" id="open-license-modal" class="hover:underline text-white">利用規約</a>|
@@ -2752,9 +2664,9 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
     </div>
     <div class="relative flex justify-center px-4 flex-shrink-0" id="character-and-message" style="max-width: min(90vw, 450px); width: 100%; margin: 0 auto; height: 400px; align-items: flex-end; padding-bottom: 0;">
     <div class="relative" id="char-image-container">
-    <img alt="AIキャラクター アメミヤチカ" class="h-auto rounded-lg object-contain relative z-15" id="char-image" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amemiya_normal.png" style="min-width: 100px;"/>
+    <img alt="AIキャラクター アメミヤチカ" class="h-auto rounded-lg object-contain relative z-15" id="char-image" src="assets/images/amemiya_normal.png" style="min-width: 100px;"/>
     <img id="pinch-overlay-image" 
-        src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amemiya_pinch01.png" 
+        src="assets/images/amemiya_pinch01.png" 
         alt="ピンチ表情オーバーレイ" 
         style="
             display: none; 
@@ -2767,7 +2679,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
             /* 既存のchar-image(z-index: 15)の上に重ねる */
             z-index: 20;
         "/>
-    <img alt="てるしー" id="terushi" src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/teru.png" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:200px;z-index:25;display:none;cursor:pointer;animation:float 3s ease-in-out infinite;"/></div>
+    <img alt="てるしー" id="terushi" src="assets/images/teru.png" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:200px;z-index:25;display:none;cursor:pointer;animation:float 3s ease-in-out infinite;"/></div>
     
     <div id="right-icons-container">
         <div id="audio-control-icon" style="display: none;">
@@ -2802,7 +2714,7 @@ document.addEventListener('mousedown', handleInitialInteraction, true);
 </div>
 <div id="reset-button-container" class="transition duration-150 ease-in-out transform" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 60; cursor: pointer;">
     <img id="modal-reset-button"
-         src="https://raw.githubusercontent.com/kakinoki-meisaku/gomoku-game/main/assets/images/amagumo.png"
+         src="assets/images/amagumo.png"
          alt="もう一回"
          class="w-[100px] mx-auto hover:scale-105 active:scale-95 transition duration-150 ease-in-out" />
 </div>
@@ -2922,53 +2834,17 @@ if (originalPlacePiece) {
     return result; // 元の処理の結果を返す
   };
 }
-
-// てるしークリックで消す (スライドアウトアニメーション付き)
+// てるしークリックで消す
 if (terushiElement) {
-  terushiElement.addEventListener('click', function() {
-    // 既に消えるアニメーション中の再クリックなどを防ぐためにチェック
-    if (!terushiVisible || terushiElement.classList.contains('terushi-slide-out')) {
-        return; 
-    }
-    
-    // ゲームがアクティブかどうかのチェック（必要に応じて）
-    // if (!gameActive) { return; } 
-
-    // 1. スライドアウトクラスを追加し、transform の制御権を奪う。
-    // （このクラス内の animation: none !important; で、全ての animation を停止させる）
-    terushiElement.classList.add('terushi-slide-out');
-    
-    // 2. 負け時のアピールアニメーションのクラスは、アニメーションが始まってから削除する。
-    //    あるいは、CSSで animation: none !important; が効いていることを信じて、この行は現状維持。
-    terushiElement.classList.remove('terushi-loss-assert-active'); // この行の位置はここでOK
-    
-    // 3. SEとボイス
-    playSE(TERU_OK_SE_URL, TERU_SE_VOLUME_DEFAULT);
-    playVoice(TETU_OK_VOICES, 1.0); // 100%の確率でランダム再生
-    
-    // 4. アニメーション完了後の処理 (0.5秒後に実行)
-    // CSSの transition: 0.5s に合わせて 500ms を設定
-    setTimeout(() => {
-        // 完全に非表示にする
-        terushiElement.style.display = 'none';
-        
-        // スライドアウトクラスを削除して、次の表示に備える
-        terushiElement.classList.remove('terushi-slide-out');
-
-        // フラグを更新
-        terushiVisible = false;
-
-        // タイマーのリセット（元のコードにあったコメント部分）
-        // if (timerElement) {
-        //  timerElement.innerHTML = '残り時間: <span class="text-lg font-extrabold">' + TURN_TIME_LIMIT + '</span> 秒';
-        // }
-        
-        // 【重要】ゲームの「救済」ロジックをここに追記
-        // 例: AIの次の手番をスキップする処理など...
-        
-    }, 3000); 
-
-  });
+  terushiElement.addEventListener('click', () => {
+    playSE(TERU_OK_SE_URL, TERU_SE_VOLUME_DEFAULT);
+    playVoice(TETU_OK_VOICES, 1.0); // 100%の確率でランダム再生
+    terushiVisible = false;
+    terushiElement.style.display = 'none';
+//     if (timerElement) {
+//       timerElement.innerHTML = '残り時間: <span class="text-lg font-extrabold">' + TURN_TIME_LIMIT + '</span> 秒';
+//     }
+  });
 }
 
 // ゲームリセット時のてるしー消去
